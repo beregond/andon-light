@@ -9,7 +9,7 @@ use esp_hal::{
     // delay::Delay,
     dma::*,
     dma_buffers,
-    gpio::{GpioPin, Io, Level, Output},
+    gpio::{GpioPin, Io, Level, Output, NO_PIN},
     peripherals::Peripherals,
     peripherals::SPI2,
     prelude::*,
@@ -22,8 +22,11 @@ use esp_hal::{
 };
 
 use embassy_executor::Spawner;
+use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
+use embedded_hal_1::digital::OutputPin;
 use esp_hal::timer::timg::TimerGroup;
+use static_cell::StaticCell;
 
 #[embassy_executor::task]
 async fn blink_led(mut led: Output<'static, GpioPin<4>>) {
@@ -63,7 +66,7 @@ async fn main(spawner: Spawner) {
     let sclk = io.pins.gpio8;
     let miso = io.pins.gpio9;
     let mosi = io.pins.gpio10;
-    let cs = io.pins.gpio2;
+    let cs = Output::new(io.pins.gpio2, Level::High);
 
     let dma = Dma::new(peripherals.DMA);
     let dma_channel = dma.channel0;
@@ -72,12 +75,15 @@ async fn main(spawner: Spawner) {
     let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
     let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
 
-    let mut spi: SpiDmaBus<SPI2, DmaChannel0, FullDuplexMode, Async> =
+    let spi: SpiDmaBus<SPI2, DmaChannel0, FullDuplexMode, Async> =
         Spi::new(peripherals.SPI2, 3u32.MHz(), SpiMode::Mode0, &clocks)
-            .with_pins(Some(sclk), Some(mosi), Some(miso), Some(cs))
+            .with_pins(Some(sclk), Some(mosi), Some(miso), NO_PIN)
             .with_dma(dma_channel.configure_for_async(false, DmaPriority::Priority0))
             .with_buffers(dma_tx_buf, dma_rx_buf);
 
-    let mut andon_light = common::AndonLight::new(8);
-    andon_light.run_test_procedure(&mut spi).await;
+    static SPI_BUS: StaticCell<common::Spi2Bus> = StaticCell::new();
+    let spi_bus = SPI_BUS.init(Mutex::new(spi));
+
+    let mut andon_light = common::AndonLight::new(16);
+    andon_light.run_test_procedure(spi_bus, cs).await;
 }
