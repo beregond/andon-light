@@ -157,9 +157,9 @@ fn to_bytes(mut data: u8) -> [u8; 4] {
     // These result in the upper and lower spi frequency limits
     let mut result = [0b0; 4];
     let patterns = [0b1000_1000, 0b1000_1110, 0b11101000, 0b11101110];
-    for i in 0..4 {
+    for item in result.iter_mut() {
         let bits = (data & 0b1100_0000) >> 6;
-        result[i] = patterns[bits as usize];
+        *item = patterns[bits as usize];
         data <<= 2;
     }
     result

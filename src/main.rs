@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-mod common;
+mod core;
 
 use esp_backtrace as _;
 use esp_hal::{
@@ -24,7 +24,6 @@ use esp_hal::{
 use embassy_executor::Spawner;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
-use embedded_hal_1::digital::OutputPin;
 use esp_hal::timer::timg::TimerGroup;
 use static_cell::StaticCell;
 
@@ -81,9 +80,9 @@ async fn main(spawner: Spawner) {
             .with_dma(dma_channel.configure_for_async(false, DmaPriority::Priority0))
             .with_buffers(dma_tx_buf, dma_rx_buf);
 
-    static SPI_BUS: StaticCell<common::Spi2Bus> = StaticCell::new();
+    static SPI_BUS: StaticCell<core::Spi2Bus> = StaticCell::new();
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
 
-    let mut andon_light = common::AndonLight::new(16);
+    let mut andon_light = core::AndonLight::new(16);
     andon_light.run_test_procedure(spi_bus, cs).await;
 }
