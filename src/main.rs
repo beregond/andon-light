@@ -2,6 +2,7 @@
 #![no_main]
 
 mod core;
+mod prelude;
 
 use esp_backtrace as _;
 use esp_hal::{
@@ -20,6 +21,7 @@ use esp_hal::{
     system::SystemControl,
     Async,
 };
+use prelude::*;
 
 use embassy_executor::Spawner;
 use embassy_sync::mutex::Mutex;
@@ -65,7 +67,9 @@ async fn main(spawner: Spawner) {
     let sclk = io.pins.gpio8;
     let miso = io.pins.gpio9;
     let mosi = io.pins.gpio10;
-    let cs = Output::new(io.pins.gpio2, Level::High);
+    let cs: ControlPin<'static, GpioPin<2>> = ControlPin {
+        pin: Output::new(io.pins.gpio2, Level::High),
+    };
 
     let dma = Dma::new(peripherals.DMA);
     let dma_channel = dma.channel0;

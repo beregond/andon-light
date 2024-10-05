@@ -1,12 +1,12 @@
+use crate::prelude::ControlPin;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
-use embedded_hal_1::digital::{ErrorType, OutputPin};
 use embedded_hal_async::spi::SpiDevice as _;
 use esp_hal::{
     dma::*,
-    gpio::{GpioPin, Output},
+    gpio::GpioPin,
     peripherals::SPI2,
     spi::{master::SpiDmaBus, FullDuplexMode},
     Async,
@@ -44,28 +44,6 @@ pub struct AndonLight {
     leds_amount: u8,
 }
 
-struct ControlPin<'d, T> {
-    pin: Output<'d, T>,
-}
-
-impl<'d, T> OutputPin for ControlPin<'d, T>
-where
-    T: esp_hal::gpio::OutputPin,
-{
-    fn set_low(&mut self) -> Result<(), Self::Error> {
-        self.pin.set_low();
-        Ok(())
-    }
-
-    fn set_high(&mut self) -> Result<(), Self::Error> {
-        self.pin.set_high();
-        Ok(())
-    }
-}
-impl<'d, T> ErrorType for ControlPin<'d, T> {
-    type Error = core::convert::Infallible;
-}
-
 impl AndonLight {
     pub fn new(leds_amount: u8) -> Self {
         Self {
@@ -75,13 +53,12 @@ impl AndonLight {
         }
     }
 
-    pub async fn run_test_procedure<'a>(
+    pub async fn run_test_procedure(
         &mut self,
         spi: &'static Spi2Bus,
-        cs: Output<'static, GpioPin<2>>,
+        cs: ControlPin<'static, GpioPin<2>>,
     ) {
-        let pin = ControlPin { pin: cs };
-        let mut dev = SpiDevice::new(spi, pin);
+        let mut dev = SpiDevice::new(spi, cs);
         let green = Color { r: 0, g: 16, b: 0 };
         let red = Color { r: 16, g: 0, b: 0 };
         let blue = Color { r: 0, g: 0, b: 16 };
@@ -134,7 +111,7 @@ impl AndonLight {
                 FullDuplexMode,
                 Async,
             >,
-            ControlPin<'_, GpioPin<2>>,
+            ControlPin<'static, GpioPin<2>>,
         >,
         color: &Color,
     ) {
