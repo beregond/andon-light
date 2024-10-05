@@ -6,6 +6,7 @@ version = 3
 name = "andon-light"
 version = "0.1.0"
 dependencies = [
+ "andon-light-core",
  "embassy-embedded-hal",
  "embassy-executor",
  "embassy-sync 0.6.0",
@@ -23,6 +24,13 @@ dependencies = [
  "serde-json-core",
  "smoltcp",
  "static_cell",
+]
+
+[[package]]
+name = "andon-light-core"
+version = "0.1.0"
+dependencies = [
+ "embassy-time",
 ]
 
 [[package]]

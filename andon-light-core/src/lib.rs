@@ -1,4 +1,17 @@
+#![no_std]
+
 use embassy_time::{Duration, Timer};
+
+static PATTERN_DEVICE_OK: u8 = 0b1111;
+static PATTERN_DEVICE_IDLE: u8 = 0b0011;
+static PATTERN_DEVICE_WARN: u8 = 0b0110;
+static PATTERN_DEVICE_ERROR: u8 = 0b1001;
+
+static PATTERN_SYSTEM_OK: u8 = 0b0000;
+static PATTERN_SYSTEM_WARN: u8 = 0b0001;
+static PATTERN_SYSTEM_ERROR: u8 = 0b0100;
+
+static PATTERN_FATAL_ERROR: u8 = 0b0101;
 
 pub trait OutputSpiDevice<Word: Copy + 'static = u8> {
     type Error: core::fmt::Debug;
@@ -45,7 +58,19 @@ impl AndonLight {
         }
     }
 
-    pub async fn run_test_procedure(&mut self, mut device: impl OutputSpiDevice) {
+    #[inline]
+    fn leds_per_segment(&self) -> u8 {
+        self.leds_amount / 4
+    }
+
+    pub async fn signal(&mut self, device: &mut impl OutputSpiDevice) {
+        let green = Color { r: 0, g: 16, b: 0 };
+        for _ in 0..self.leds_amount {
+            self.send_color(device, &green).await;
+        }
+    }
+
+    pub async fn run_test_procedure(&mut self, device: &mut impl OutputSpiDevice) {
         let green = Color { r: 0, g: 16, b: 0 };
         let red = Color { r: 16, g: 0, b: 0 };
         let blue = Color { r: 0, g: 0, b: 16 };
@@ -68,21 +93,20 @@ impl AndonLight {
                 empty, empty, white, white, empty, empty, white, white, empty, empty, white, white,
                 empty, empty, white, white,
             ],
+            [empty; 16],
         ];
 
-        loop {
-            for row in send.iter() {
-                for color in row.iter() {
-                    self.send_color(&mut device, color).await;
-                }
-                Timer::after(Duration::from_millis(self.speed as u64)).await;
+        for row in send.iter() {
+            for color in row.iter() {
+                self.send_color(device, color).await;
             }
-            for row in send2.iter() {
-                for color in row.iter() {
-                    self.send_color(&mut device, color).await;
-                }
-                Timer::after(Duration::from_millis(self.speed as u64)).await;
+            Timer::after(Duration::from_millis(self.speed as u64)).await;
+        }
+        for row in send2.iter() {
+            for color in row.iter() {
+                self.send_color(device, color).await;
             }
+            Timer::after(Duration::from_millis(self.speed as u64)).await;
         }
     }
 

@@ -1,10 +1,9 @@
 #![no_std]
 #![no_main]
 
-mod core;
 mod prelude;
 
-use core::OutputSpiDevice;
+use andon_light_core::OutputSpiDevice;
 
 use esp_backtrace as _;
 use esp_hal::{
@@ -44,19 +43,14 @@ async fn blink_led(mut led: Output<'static, GpioPin<4>>) {
     }
 }
 
-async fn generic_run_strip(device: (impl OutputSpiDevice + 'static), diodes: u8, speed: u16) {
-    let mut andon_light = core::AndonLight::new(diodes, speed);
-    andon_light.run_test_procedure(device).await;
-}
-
-#[embassy_executor::task]
-async fn run_strip(device: (impl OutputSpiDevice + 'static), diodes: u8, speed: u16) {
-    generic_run_strip(device, diodes, speed).await;
-}
-
-#[embassy_executor::task]
-async fn run_strip2(device: (impl OutputSpiDevice + 'static), diodes: u8, speed: u16) {
-    generic_run_strip(device, diodes, speed).await;
+#[embassy_executor::task(pool_size = 2)]
+async fn run_strip(mut device: (impl OutputSpiDevice + 'static), diodes: u8, speed: u16) {
+    let mut andon_light = andon_light_core::AndonLight::new(diodes, speed);
+    andon_light.run_test_procedure(&mut device).await;
+    loop {
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(100)).await;
+    }
 }
 
 #[esp_hal_embassy::main]
@@ -120,5 +114,5 @@ async fn main(spawner: Spawner) {
     let spi_dev = SpiDev {
         device: SpiDevice::new(spi_bus, cs2),
     };
-    spawner.spawn(run_strip2(spi_dev, 4, 300)).unwrap();
+    spawner.spawn(run_strip(spi_dev, 4, 300)).unwrap();
 }

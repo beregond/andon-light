@@ -1,4 +1,4 @@
-use crate::core::OutputSpiDevice;
+use andon_light_core::OutputSpiDevice;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_hal_1::digital::{ErrorType, OutputPin};

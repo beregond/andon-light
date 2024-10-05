@@ -47,6 +47,7 @@ serde-json-core = "0.6.0"
 embassy-sync = "0.6.0"
 embassy-embedded-hal = "0.2.0"
 embedded_hal_1 = { package = "embedded-hal", version = "1.0.0" }
+andon-light-core = { path = "./andon-light-core/" }
 
 [profile.dev]
 # Rust debug is too slow.
