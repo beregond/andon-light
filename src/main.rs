@@ -4,6 +4,8 @@
 mod core;
 mod prelude;
 
+use core::OutputSpiDevice;
+
 use esp_backtrace as _;
 use esp_hal::{
     clock::ClockControl,
@@ -23,19 +25,38 @@ use esp_hal::{
 };
 use prelude::*;
 
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
 use esp_hal::timer::timg::TimerGroup;
 use static_cell::StaticCell;
 
+type Spi2Bus = Mutex<NoopRawMutex, SpiDmaBus<'static, SPI2, DmaChannel0, FullDuplexMode, Async>>;
+
 #[embassy_executor::task]
 async fn blink_led(mut led: Output<'static, GpioPin<4>>) {
     led.set_high();
     loop {
-        Timer::after(Duration::from_millis(200)).await;
+        Timer::after(Duration::from_millis(100)).await;
         led.toggle();
     }
+}
+
+async fn generic_run_strip(device: (impl OutputSpiDevice + 'static), diodes: u8, speed: u16) {
+    let mut andon_light = core::AndonLight::new(diodes, speed);
+    andon_light.run_test_procedure(device).await;
+}
+
+#[embassy_executor::task]
+async fn run_strip(device: (impl OutputSpiDevice + 'static), diodes: u8, speed: u16) {
+    generic_run_strip(device, diodes, speed).await;
+}
+
+#[embassy_executor::task]
+async fn run_strip2(device: (impl OutputSpiDevice + 'static), diodes: u8, speed: u16) {
+    generic_run_strip(device, diodes, speed).await;
 }
 
 #[esp_hal_embassy::main]
@@ -67,8 +88,12 @@ async fn main(spawner: Spawner) {
     let sclk = io.pins.gpio8;
     let miso = io.pins.gpio9;
     let mosi = io.pins.gpio10;
-    let cs: ControlPin<'static, GpioPin<2>> = ControlPin {
+    // TODO make it actually static
+    let cs = ControlPin {
         pin: Output::new(io.pins.gpio2, Level::High),
+    };
+    let cs2 = ControlPin {
+        pin: Output::new(io.pins.gpio3, Level::High),
     };
 
     let dma = Dma::new(peripherals.DMA);
@@ -84,9 +109,16 @@ async fn main(spawner: Spawner) {
             .with_dma(dma_channel.configure_for_async(false, DmaPriority::Priority0))
             .with_buffers(dma_tx_buf, dma_rx_buf);
 
-    static SPI_BUS: StaticCell<core::Spi2Bus> = StaticCell::new();
+    static SPI_BUS: StaticCell<Spi2Bus> = StaticCell::new();
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
 
-    let mut andon_light = core::AndonLight::new(16);
-    andon_light.run_test_procedure(spi_bus, cs).await;
+    let spi_dev = SpiDev {
+        device: SpiDevice::new(spi_bus, cs),
+    };
+    spawner.spawn(run_strip(spi_dev, 16, 150)).unwrap();
+    Timer::after(Duration::from_millis(77)).await;
+    let spi_dev = SpiDev {
+        device: SpiDevice::new(spi_bus, cs2),
+    };
+    spawner.spawn(run_strip2(spi_dev, 4, 300)).unwrap();
 }

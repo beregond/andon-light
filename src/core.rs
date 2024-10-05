@@ -1,19 +1,9 @@
-use crate::prelude::ControlPin;
-use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
-use embedded_hal_async::spi::SpiDevice as _;
-use esp_hal::{
-    dma::*,
-    gpio::GpioPin,
-    peripherals::SPI2,
-    spi::{master::SpiDmaBus, FullDuplexMode},
-    Async,
-};
 
-pub type Spi2Bus =
-    Mutex<NoopRawMutex, SpiDmaBus<'static, SPI2, DmaChannel0, FullDuplexMode, Async>>;
+pub trait OutputSpiDevice<Word: Copy + 'static = u8> {
+    type Error: core::fmt::Debug;
+    async fn write(&mut self, buf: &[Word]) -> Result<(), Self::Error>;
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Color {
@@ -42,23 +32,20 @@ pub struct AndonLight {
     device_state: DeviceState,
     system_state: SystemState,
     leds_amount: u8,
+    speed: u16,
 }
 
 impl AndonLight {
-    pub fn new(leds_amount: u8) -> Self {
+    pub fn new(leds_amount: u8, speed: u16) -> Self {
         Self {
             device_state: DeviceState::Ok,
             system_state: SystemState::Ok,
             leds_amount,
+            speed,
         }
     }
 
-    pub async fn run_test_procedure(
-        &mut self,
-        spi: &'static Spi2Bus,
-        cs: ControlPin<'static, GpioPin<2>>,
-    ) {
-        let mut dev = SpiDevice::new(spi, cs);
+    pub async fn run_test_procedure(&mut self, mut device: impl OutputSpiDevice) {
         let green = Color { r: 0, g: 16, b: 0 };
         let red = Color { r: 16, g: 0, b: 0 };
         let blue = Color { r: 0, g: 0, b: 16 };
@@ -85,36 +72,21 @@ impl AndonLight {
 
         loop {
             for row in send.iter() {
-                for item in row.iter() {
-                    self.send_color(&mut dev, item).await;
+                for color in row.iter() {
+                    self.send_color(&mut device, color).await;
                 }
-                Timer::after(Duration::from_millis(200)).await;
+                Timer::after(Duration::from_millis(self.speed as u64)).await;
             }
             for row in send2.iter() {
-                for item in row.iter() {
-                    self.send_color(&mut dev, item).await;
+                for color in row.iter() {
+                    self.send_color(&mut device, color).await;
                 }
-                Timer::after(Duration::from_millis(100)).await;
+                Timer::after(Duration::from_millis(self.speed as u64)).await;
             }
         }
     }
 
-    async fn send_color<'a>(
-        &mut self,
-        spi: &mut SpiDevice<
-            '_,
-            NoopRawMutex,
-            SpiDmaBus<
-                'static,
-                esp_hal::peripherals::SPI2,
-                esp_hal::dma::DmaChannel0,
-                FullDuplexMode,
-                Async,
-            >,
-            ControlPin<'static, GpioPin<2>>,
-        >,
-        color: &Color,
-    ) {
+    async fn send_color<'a>(&mut self, spi: &mut impl OutputSpiDevice, color: &Color) {
         // Priming spi as it eats first byte ¯\_(ツ)_/¯
         spi.write(&[0b0]).await.unwrap();
         let data = to_bytes(color.g);
