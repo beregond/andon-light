@@ -50,8 +50,8 @@ pub struct SpiDev<'d, T: esp_hal::gpio::OutputPin> {
 impl<'d, T: esp_hal::gpio::OutputPin> OutputSpiDevice for SpiDev<'d, T> {
     type Error = core::convert::Infallible;
 
-    async fn write(&mut self, buf: &[u8]) -> Result<(), core::convert::Infallible> {
-        self.device.write(buf).await;
+    async fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        let _ = self.device.write(buf).await;
         Ok(())
     }
 }

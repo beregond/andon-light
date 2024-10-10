@@ -43,13 +43,48 @@ async fn blink_led(mut led: Output<'static, GpioPin<4>>) {
     }
 }
 
-#[embassy_executor::task(pool_size = 2)]
-async fn run_strip(mut device: (impl OutputSpiDevice + 'static), diodes: u8, speed: u16) {
-    let mut andon_light = andon_light_core::AndonLight::new(diodes, speed);
+#[embassy_executor::task]
+async fn run_strip(
+    mut device: (impl OutputSpiDevice + 'static),
+    diodes: u8,
+    brightness: u8,
+    speed: u16,
+) {
+    let mut andon_light = andon_light_core::AndonLight::new(diodes, brightness, speed);
     andon_light.run_test_procedure(&mut device).await;
+    andon_light.signal(&mut device).await;
+    let brk = speed as u64 * 4;
+    Timer::after(Duration::from_millis(brk)).await;
     loop {
+        andon_light.set_device_state(andon_light_core::DeviceState::Idle);
         andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(100)).await;
+        Timer::after(Duration::from_millis(brk)).await;
+        andon_light.set_device_state(andon_light_core::DeviceState::Warn);
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(brk)).await;
+        andon_light.set_device_state(andon_light_core::DeviceState::Error);
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(brk)).await;
+        andon_light.set_device_state(andon_light_core::DeviceState::Ok);
+        andon_light.set_system_state(andon_light_core::SystemState::Warn);
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(brk)).await;
+        andon_light.set_device_state(andon_light_core::DeviceState::Idle);
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(brk)).await;
+        andon_light.set_device_state(andon_light_core::DeviceState::Warn);
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(brk)).await;
+        andon_light.set_system_state(andon_light_core::SystemState::Error);
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(brk)).await;
+        andon_light.set_device_state(andon_light_core::DeviceState::Error);
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(brk)).await;
+        andon_light.set_system_state(andon_light_core::SystemState::Ok);
+        andon_light.set_device_state(andon_light_core::DeviceState::Ok);
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(brk)).await;
     }
 }
 
@@ -86,9 +121,6 @@ async fn main(spawner: Spawner) {
     let cs = ControlPin {
         pin: Output::new(io.pins.gpio2, Level::High),
     };
-    let cs2 = ControlPin {
-        pin: Output::new(io.pins.gpio3, Level::High),
-    };
 
     let dma = Dma::new(peripherals.DMA);
     let dma_channel = dma.channel0;
@@ -109,10 +141,5 @@ async fn main(spawner: Spawner) {
     let spi_dev = SpiDev {
         device: SpiDevice::new(spi_bus, cs),
     };
-    spawner.spawn(run_strip(spi_dev, 16, 150)).unwrap();
-    Timer::after(Duration::from_millis(77)).await;
-    let spi_dev = SpiDev {
-        device: SpiDevice::new(spi_bus, cs2),
-    };
-    spawner.spawn(run_strip(spi_dev, 4, 300)).unwrap();
+    spawner.spawn(run_strip(spi_dev, 16, 10, 150)).unwrap();
 }
