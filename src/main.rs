@@ -29,8 +29,6 @@ use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
-use embedded_hal_bus::spi::{ExclusiveDevice, RefCellDevice};
-use embedded_sdmmc::SdCard;
 use esp_hal::timer::timg::TimerGroup;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
@@ -38,41 +36,27 @@ use static_cell::StaticCell;
 const CONFIG_BUFFER_SIZE: usize = 4096;
 type Spi2Bus = Mutex<NoopRawMutex, SpiDmaBus<'static, SPI2, DmaChannel0, FullDuplexMode, Async>>;
 
-pub struct TestTimeSource {
-    fixed: embedded_sdmmc::Timestamp,
-}
-
-impl embedded_sdmmc::TimeSource for TestTimeSource {
-    fn get_timestamp(&self) -> embedded_sdmmc::Timestamp {
-        self.fixed
-    }
-}
-
-pub fn make_time_source() -> TestTimeSource {
-    TestTimeSource {
-        fixed: embedded_sdmmc::Timestamp {
-            year_since_1970: 33,
-            zero_indexed_month: 3,
-            zero_indexed_day: 3,
-            hours: 13,
-            minutes: 30,
-            seconds: 5,
-        },
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Envelope {
+pub struct Config {
     version: u32,
-    config: AndonConfig,
+    core_config: CoreConfig,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            version: 5,
+            core_config: CoreConfig::default(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct AndonConfig {
+pub struct CoreConfig {
     leds_amount: u8,
 }
 
-impl Default for AndonConfig {
+impl Default for CoreConfig {
     fn default() -> Self {
         Self { leds_amount: 4 }
     }
@@ -173,40 +157,27 @@ async fn main(spawner: Spawner) {
     let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
     let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
 
-    let mut spi: SpiDmaBus<SPI2, DmaChannel0, FullDuplexMode, Async> =
+    let spi: SpiDmaBus<SPI2, DmaChannel0, FullDuplexMode, Async> =
         Spi::new(peripherals.SPI2, 4u32.MHz(), SpiMode::Mode0, &clocks)
             .with_pins(Some(sclk), Some(mosi), Some(miso), NO_PIN)
             .with_dma(dma_channel.configure_for_async(false, DmaPriority::Priority0))
             .with_buffers(dma_tx_buf, dma_rx_buf);
 
     let sd_select = Output::new(io.pins.gpio2, Level::High);
-    //
     let mut leds_amount: u8 = 16;
-
-    {
-        let sd_spi_device = ExclusiveDevice::new(&mut spi, sd_select, delay).unwrap();
-        let sd_card = SdCard::new(sd_spi_device, delay);
-
-        let mut volume_mgr = embedded_sdmmc::VolumeManager::new(sd_card, make_time_source());
-        if let Ok(mut volume0) = volume_mgr.open_volume(embedded_sdmmc::VolumeIdx(0)) {
-            // println!("Volume 0: {:?}", volume0);
-            // Open the root directory (mutably borrows from the volume).
-            let mut root_dir = volume0.open_root_dir().unwrap();
-            let mut my_file = root_dir
-                .open_file_in_dir("CONFIG.JSO", embedded_sdmmc::Mode::ReadOnly)
-                .unwrap();
-            let mut buffer = [0u8; CONFIG_BUFFER_SIZE];
-            let num_read = my_file.read(&mut buffer).unwrap();
-            if let Ok((envelope, _)) =
-                serde_json_core::de::from_slice::<Envelope>(&buffer[0..num_read])
-            {
-                leds_amount = envelope.config.leds_amount;
-            }
-        };
-    }
+    let mut buffer = [0u8; CONFIG_BUFFER_SIZE];
 
     static SPI_BUS: StaticCell<Spi2Bus> = StaticCell::new();
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
+
+    let sd_reader = SdReader::new(spi_bus, sd_select, delay);
+    let result = sd_reader
+        .read_config::<Config>("CONFIG.JSO", &mut buffer)
+        .await;
+    if let Some(config) = result {
+        esp_println::println!("config read properly");
+        leds_amount = config.core_config.leds_amount;
+    }
 
     let spi_dev = SpiDev {
         device: SpiDevice::new(spi_bus, leds_select),
