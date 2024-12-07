@@ -59,7 +59,7 @@ opt-level = "s"
 
 [profile.release]
 codegen-units = 1        # LLVM can perform better optimizations using a single thread
-debug = 2
+debug = 0
 debug-assertions = false
 incremental = false
 lto = 'fat'

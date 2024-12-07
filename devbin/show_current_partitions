@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+# Enable strict mode
+set -euo pipefail
+IFS=$'\n\t'
+
+command_to_check="esptool.py"
+
+if ! command -v "$command_to_check" &>/dev/null; then
+  echo "$command_to_check is not installed or not in the PATH. Exiting."
+  exit 1
+fi
+
+command_to_check="espflash"
+
+if ! command -v "$command_to_check" &>/dev/null; then
+  echo "$command_to_check is not installed or not in the PATH. Exiting."
+  exit 1
+fi
+
+temp_file=$(mktemp)
+esptool.py read_flash 0x8000 0x1000 $temp_file
+espflash partition-table --to-csv $temp_file
+rm -f "$temp_file"

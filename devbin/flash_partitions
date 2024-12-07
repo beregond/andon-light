@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+# Check if a filename argument is provided
+if [ -z "$1" ]; then
+  echo "Usage: $0 <filename>"
+  exit 1
+fi
+
+# Enable strict mode
+set -euo pipefail
+IFS=$'\n\t'
+
+filename="$1"
+
+command_to_check="esptool.py"
+
+if ! command -v "$command_to_check" &>/dev/null; then
+  echo "$command_to_check is not installed or not in the PATH. Exiting."
+  exit 1
+fi
+
+command_to_check="espflash"
+
+if ! command -v "$command_to_check" &>/dev/null; then
+  echo "$command_to_check is not installed or not in the PATH. Exiting."
+  exit 1
+fi
+
+if [ -e "$filename" ]; then
+  read -p "Do you want to overwrite partitions? (y/n): " confirm
+
+  # Check user input
+  if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    echo "Overwriting partitions..."
+
+    temp_file=$(mktemp)
+    espflash partition-table --to-binary $filename -o $temp_file
+    esptool.py write_flash 0x8000 $temp_file
+    rm -f "$temp_file"
+
+  fi
+else
+  echo "File '$FILENAME' does not exist."
+fi
