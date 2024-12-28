@@ -2,6 +2,7 @@
 #![no_main]
 
 mod prelude;
+use prelude::*;
 
 use andon_light_core::OutputSpiDevice;
 
@@ -12,6 +13,7 @@ use esp_hal::{
     dma::*,
     dma_buffers,
     gpio::{GpioPin, Io, Level, Output, NO_PIN},
+    i2c::I2C,
     peripherals::Peripherals,
     peripherals::SPI2,
     prelude::*,
@@ -22,7 +24,6 @@ use esp_hal::{
     system::SystemControl,
     Async,
 };
-use prelude::*;
 
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
@@ -32,6 +33,8 @@ use embassy_time::{Duration, Timer};
 use esp_hal::timer::timg::TimerGroup;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
+
+use tcs3472::Tcs3472;
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 type Spi2Bus = Mutex<NoopRawMutex, SpiDmaBus<'static, SPI2, DmaChannel0, FullDuplexMode, Async>>;
@@ -63,7 +66,7 @@ impl Default for CoreConfig {
 }
 
 #[embassy_executor::task]
-async fn blink_led(mut led: Output<'static, GpioPin<4>>) {
+async fn blink_led(mut led: Output<'static, GpioPin<3>>) {
     led.set_high();
     loop {
         Timer::after(Duration::from_millis(100)).await;
@@ -139,8 +142,8 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(&clocks, timg0.timer0);
 
     let io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
-    let led = Output::new(io.pins.gpio4, Level::High);
-    spawner.spawn(blink_led(led)).unwrap();
+    // let led = Output::new(io.pins.gpio3, Level::High);
+    // spawner.spawn(blink_led(led)).unwrap();
 
     let sclk = io.pins.gpio8;
     let miso = io.pins.gpio9;
@@ -185,4 +188,126 @@ async fn main(spawner: Spawner) {
     spawner
         .spawn(run_strip(spi_dev, leds_amount, 10, 150))
         .unwrap();
+
+    // Create a new peripheral object with the described wiring
+    // and standard I2C clock speed
+    let i2c = I2C::new_async(
+        peripherals.I2C0,
+        io.pins.gpio6,
+        io.pins.gpio7,
+        100.kHz(),
+        &clocks,
+    );
+    let mut sensor = Tcs3472::new(i2c);
+    if let Err(e) = sensor.enable().await {
+        esp_println::dbg!(e);
+    } else {
+        sensor.enable_rgbc().await.unwrap();
+        while !sensor.is_rgbc_status_valid().await.unwrap() {
+            // wait for measurement to be available
+        }
+
+        loop {
+            let measurement = sensor.read_all_channels().await.unwrap();
+            esp_println::println!(
+                "Raw values: {:.2} ({:.2}, {:.2}, {:.2}) ",
+                measurement.clear,
+                measurement.red,
+                measurement.green,
+                measurement.blue,
+            );
+            let (r, g, b, color) =
+                normalize_rgb(measurement.red, measurement.green, measurement.blue);
+            // let color = map_to_basic_color(r, g, b);
+            esp_println::println!(
+                "Normalized RGB: ({:.2}, {:.2}, {:.2}) -> Basic Color: {}",
+                r,
+                g,
+                b,
+                color,
+            );
+
+            Timer::after(Duration::from_millis(3000)).await;
+        }
+    }
+}
+
+enum ColorLevel {
+    High,
+    Medium,
+    Low,
+}
+
+// Function to determine the basic color based on normalized RGB values
+fn map_to_basic_color(r: u16, g: u16, b: u16) -> &'static str {
+    // Define the basic 12 colors. These are just names for simplicity.
+    match map_three(r, g, b) {
+        (ColorLevel::High, ColorLevel::Low, ColorLevel::High) => "Magenta",
+        (ColorLevel::High, ColorLevel::Low, ColorLevel::Medium) => "Pink",
+        (ColorLevel::High, ColorLevel::Low, ColorLevel::Low) => "Red",
+        (ColorLevel::High, ColorLevel::Medium, ColorLevel::Low) => "Orange",
+        (ColorLevel::High, ColorLevel::High, ColorLevel::Low) => "Yellow",
+        (ColorLevel::Medium, ColorLevel::High, ColorLevel::Low) => "Lime",
+        (ColorLevel::Low, ColorLevel::High, ColorLevel::Low) => "Lime",
+        (ColorLevel::Low, ColorLevel::High, ColorLevel::Medium) => "Mint",
+        (ColorLevel::Low, ColorLevel::High, ColorLevel::High) => "Cyan",
+        (ColorLevel::Low, ColorLevel::Medium, ColorLevel::High) => "Azure",
+        (ColorLevel::Low, ColorLevel::Low, ColorLevel::High) => "Blue",
+        (ColorLevel::Medium, ColorLevel::Low, ColorLevel::High) => "Violet",
+        (_, _, _) => "Black",
+    }
+}
+
+fn map_three(r: u16, g: u16, b: u16) -> (ColorLevel, ColorLevel, ColorLevel) {
+    if r == 100 {
+        let (g, b) = map_two(g, b);
+        (ColorLevel::High, g, b)
+    } else if g == 100 {
+        let (r, b) = map_two(r, b);
+        (r, ColorLevel::High, b)
+    } else {
+        let (r, g) = map_two(r, g);
+        (r, g, ColorLevel::High)
+    }
+}
+
+fn map_two(first: u16, second: u16) -> (ColorLevel, ColorLevel) {
+    if first > second {
+        (map_one(first), ColorLevel::Low)
+    } else {
+        (ColorLevel::Low, map_one(second))
+    }
+}
+
+#[inline]
+fn map_one(value: u16) -> ColorLevel {
+    if value > 90 {
+        ColorLevel::High
+    } else if value > 60 {
+        ColorLevel::Medium
+    } else {
+        ColorLevel::Low
+    }
+}
+
+fn normalize_rgb(red: u16, green: u16, blue: u16) -> (u16, u16, u16, &'static str) {
+    let max = max_of_three(red, green, blue);
+    esp_println::println!("{:?}", max);
+    if max == 0 {
+        return (0, 0, 0, "Black");
+    }
+    let normalize = |val: u16| (val as f32 / max as f32 * 100.0) as u16;
+    let (r, g, b) = (normalize(red), normalize(green), normalize(blue));
+    (r, g, b, map_to_basic_color(r, g, b))
+}
+
+pub fn max_of_three(a: u16, b: u16, c: u16) -> u16 {
+    let mut max = a;
+    if b > max {
+        max = b;
+    }
+    if c > max {
+        max = c;
+    }
+    max
 }
