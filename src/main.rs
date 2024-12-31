@@ -4,7 +4,7 @@
 mod prelude;
 use prelude::*;
 
-use andon_light_core::OutputSpiDevice;
+use andon_light_core::{AndonLight, OutputSpiDevice};
 
 use esp_backtrace as _;
 use esp_hal::{
@@ -27,7 +27,7 @@ use esp_hal::{
 
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex};
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
 use esp_hal::timer::timg::TimerGroup;
@@ -38,6 +38,7 @@ use tcs3472::Tcs3472;
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 type Spi2Bus = Mutex<NoopRawMutex, SpiDmaBus<'static, SPI2, DmaChannel0, FullDuplexMode, Async>>;
+type AndonAsyncMutex = Mutex<CriticalSectionRawMutex, AndonLight>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
@@ -77,45 +78,26 @@ async fn blink_led(mut led: Output<'static, GpioPin<3>>) {
 #[embassy_executor::task]
 async fn run_strip(
     mut device: (impl OutputSpiDevice + 'static),
-    diodes: u8,
-    brightness: u8,
-    speed: u16,
+    andon_light: &'static AndonAsyncMutex,
 ) {
-    let mut andon_light = andon_light_core::AndonLight::new(diodes, brightness, speed);
-    andon_light.run_test_procedure(&mut device).await;
-    andon_light.signal(&mut device).await;
-    let brk = speed as u64 * 5;
-    Timer::after(Duration::from_millis(brk)).await;
+    {
+        let mut andon_light = andon_light.lock().await;
+
+        // Test procedure
+        andon_light.run_test_procedure(&mut device).await;
+        andon_light.signal(&mut device).await;
+        Timer::after(Duration::from_millis(andon_light.get_speed() as u64)).await;
+    }
+
+    // Regular operation
     loop {
-        andon_light.set_device_state(andon_light_core::DeviceState::Idle);
-        andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(brk)).await;
-        andon_light.set_device_state(andon_light_core::DeviceState::Warn);
-        andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(brk)).await;
-        andon_light.set_device_state(andon_light_core::DeviceState::Error);
-        andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(brk)).await;
-        andon_light.set_device_state(andon_light_core::DeviceState::Ok);
-        andon_light.set_system_state(andon_light_core::SystemState::Warn);
-        andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(brk)).await;
-        andon_light.set_device_state(andon_light_core::DeviceState::Idle);
-        andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(brk)).await;
-        andon_light.set_device_state(andon_light_core::DeviceState::Warn);
-        andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(brk)).await;
-        andon_light.set_system_state(andon_light_core::SystemState::Error);
-        andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(brk)).await;
-        andon_light.set_device_state(andon_light_core::DeviceState::Error);
-        andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(brk)).await;
-        andon_light.set_system_state(andon_light_core::SystemState::Ok);
-        andon_light.set_device_state(andon_light_core::DeviceState::Ok);
-        andon_light.signal(&mut device).await;
-        Timer::after(Duration::from_millis(brk)).await;
+        let pause: u64;
+        {
+            let mut andon_light = andon_light.lock().await;
+            andon_light.signal(&mut device).await;
+            pause = andon_light.get_speed() as u64;
+        }
+        Timer::after(Duration::from_millis(pause)).await;
     }
 }
 
@@ -185,9 +167,11 @@ async fn main(spawner: Spawner) {
     let spi_dev = SpiDev {
         device: SpiDevice::new(spi_bus, leds_select),
     };
-    spawner
-        .spawn(run_strip(spi_dev, leds_amount, 10, 150))
-        .unwrap();
+
+    static ANDON: StaticCell<AndonAsyncMutex> = StaticCell::new();
+    let andon_light = ANDON.init(Mutex::new(AndonLight::new(leds_amount, 10, 150)));
+
+    spawner.spawn(run_strip(spi_dev, andon_light)).unwrap();
 
     // Create a new peripheral object with the described wiring
     // and standard I2C clock speed
@@ -226,8 +210,25 @@ async fn main(spawner: Spawner) {
                 b,
                 color,
             );
+            {
+                let mut andon_light = andon_light.lock().await;
+                match color {
+                    "Red" | "Pink" | "Magenta" => {
+                        andon_light.set_device_state(andon_light_core::DeviceState::Error);
+                    }
+                    "Green" | "Mint" | "Lime" => {
+                        andon_light.set_device_state(andon_light_core::DeviceState::Ok);
+                    }
+                    "Blue" | "Violet" | "Azure" => {
+                        andon_light.set_device_state(andon_light_core::DeviceState::Idle);
+                    }
+                    _ => {
+                        andon_light.set_device_state(andon_light_core::DeviceState::Warn);
+                    }
+                }
+            }
 
-            Timer::after(Duration::from_millis(3000)).await;
+            Timer::after(Duration::from_millis(500)).await;
         }
     }
 }

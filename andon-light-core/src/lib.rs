@@ -184,7 +184,7 @@ pub struct AndonLight {
 }
 
 impl AndonLight {
-    pub fn new(leds_amount: u8, brightness: u8, speed: u16) -> Self {
+    pub const fn new(leds_amount: u8, brightness: u8, speed: u16) -> Self {
         Self {
             device_state: DeviceState::Ok,
             system_state: SystemState::Ok,
@@ -197,6 +197,10 @@ impl AndonLight {
     #[inline]
     pub fn set_device_state(&mut self, state: DeviceState) {
         self.device_state = state;
+    }
+
+    pub fn get_speed(&self) -> u16 {
+        self.speed
     }
 
     #[inline]
