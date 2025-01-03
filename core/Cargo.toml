@@ -1,0 +1,3 @@
+[workspace]
+members = ["andon-light-core", "andon-light-macros"]
+resolve = "2"

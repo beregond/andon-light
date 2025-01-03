@@ -48,8 +48,8 @@ serde-json-core = "0.6.0"
 embassy-sync = "0.6.0"
 embassy-embedded-hal = "0.2.0"
 embedded-hal = "1.0.0"
-andon-light-core = { path = "./andon-light-core/" }
-andon-light-macros = { path = "./andon-light-macros/" }
+andon-light-core = { path = "./core/andon-light-core/" }
+andon-light-macros = { path = "./core/andon-light-macros/" }
 embedded-sdmmc = "0.8.1"
 embedded-hal-bus = "0.2.0"
 tcs3472 = { version = "0.2.0", path = "../tcs3472-rs", features = ["async"] }
