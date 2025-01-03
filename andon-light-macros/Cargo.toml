@@ -1,5 +1,5 @@
 [package]
-name = "andon-macros"
+name = "andon-light-macros"
 version = "0.1.0"
 edition = "2021"
 

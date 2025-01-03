@@ -7,7 +7,7 @@ name = "andon-light"
 version = "0.1.0"
 dependencies = [
  "andon-light-core",
- "andon-macros",
+ "andon-light-macros",
  "embassy-embedded-hal",
  "embassy-executor",
  "embassy-sync 0.6.0",
@@ -39,7 +39,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "andon-macros"
+name = "andon-light-macros"
 version = "0.1.0"
 dependencies = [
  "quote",
