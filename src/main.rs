@@ -5,6 +5,7 @@ mod prelude;
 use prelude::*;
 
 use andon_light_core::{AndonLight, OutputSpiDevice};
+use andon_macros::ErrorCodes;
 
 use esp_backtrace as _;
 use esp_hal::{
