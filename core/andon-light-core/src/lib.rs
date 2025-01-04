@@ -155,6 +155,7 @@ pub enum SystemState {
     Error,
 }
 
+#[derive(Debug)]
 pub enum ErrorType {
     DeviceIdle,
     DeviceWarn,
@@ -183,19 +184,31 @@ fn collapse(system: &SystemState, device: &DeviceState) -> Pattern {
     }
 }
 
-pub struct AndonLight {
+pub trait ErrorCodes {
+    const SIZE: usize;
+    const MIN_SET_SIZE: usize;
+
+    // fn as_str(&self) -> &'static str;
+    // fn from_str(value: &str) -> Result<Self, &'static str>;
+    // fn description(&self) -> &'static str;
+    // fn level(&self) -> &'static str;
+}
+
+pub struct AndonLight<T, const U: usize> {
     device_state: DeviceState,
     system_state: SystemState,
     leds_amount: u8,
     brightness: u8,
     speed: u16,
+    codes: heapless::FnvIndexSet<T, U>,
 }
 
-impl AndonLight {
+impl<T, const U: usize> AndonLight<T, U> {
     pub const fn new(leds_amount: u8, brightness: u8, speed: u16) -> Self {
         Self {
             device_state: DeviceState::Ok,
             system_state: SystemState::Ok,
+            codes: heapless::FnvIndexSet::<T, U>::new(),
             leds_amount,
             brightness,
             speed,

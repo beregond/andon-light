@@ -7,6 +7,7 @@ name = "andon-light-core"
 version = "0.1.0"
 dependencies = [
  "embassy-time",
+ "heapless",
 ]
 
 [[package]]

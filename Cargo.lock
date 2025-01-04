@@ -36,12 +36,14 @@ name = "andon-light-core"
 version = "0.1.0"
 dependencies = [
  "embassy-time",
+ "heapless",
 ]
 
 [[package]]
 name = "andon-light-macros"
 version = "0.1.0"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn 2.0.94",
 ]

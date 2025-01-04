@@ -16,6 +16,10 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
 
     let len = variants.len();
 
+    if len < 1 {
+        panic!("ErrorCodes must have at least one variant");
+    }
+
     let mut to_str_arms = Vec::new();
     let mut from_str_arms = Vec::new();
     let mut description_arms = Vec::new();
@@ -92,11 +96,11 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
                     panic!("ErrorCodes level attribute must not be empty")
                 }
                 let enum_path = match value.as_str() {
-                    "idle" => "andon_light::ErrorType::DeviceIdle",
-                    "warn" => "andon_light::ErrorType::DeviceWarn",
-                    "error" => "andon_light::ErrorType::DeviceError",
-                    "system_warn" => "andon_light::ErrorType::SystemWarn",
-                    "system_error" => "andon_light::ErrorType::SystemError",
+                    "idle" => "DeviceIdle",
+                    "warn" => "DeviceWarn",
+                    "error" => "DeviceError",
+                    "system_warn" => "SystemWarn",
+                    "system_error" => "SystemError",
                     _ => panic!("ErrorCodes level attribute must be one of: idle, warn, error, system_warn, system_error")
                 };
                 enum_path.to_string()
@@ -115,14 +119,26 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
         description_arms.push(quote::quote! {
             #ident::#variant_ident => #message,
         });
+        let path: syn::Path =
+            syn::parse_str(format!("andon_light_core::ErrorType::{}", level).as_str())
+                .expect("Failed to parse path");
+        let segments = path
+            .segments
+            .iter()
+            .map(|segment| &segment.ident)
+            .collect::<Vec<_>>();
         level_arms.push(quote::quote! {
-            #ident::#variant_ident => #level,
+            #ident::#variant_ident => #(#segments)::*,
         });
+        // println!("{:?}", level_arms);
     }
+
+    let min_size = next_power_of_2(len);
 
     quote::quote! {
         impl #ident {
             const SIZE: usize = #len;
+            const MIN_SET_SIZE: usize = #min_size;
 
             pub fn as_str(&self) -> &'static str {
                 match self {
@@ -143,7 +159,7 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
                 }
             }
 
-            pub fn level(&self) -> &'static str {
+            pub fn level(&self) -> andon_light_core::ErrorType {
                 match self {
                     #(#level_arms)*
                 }
@@ -194,4 +210,20 @@ pub fn generate_default_from_env(input: TokenStream) -> TokenStream {
             panic!("Wrong format, try (<<ENV_VAR_NAME>>, <<DEFAULT_VALUE>>)");
         }
     }
+}
+
+fn next_power_of_2(n: usize) -> usize {
+    let mut n = n;
+    if n < 2 {
+        return 2;
+    }
+
+    n -= 1;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    n += 1;
+    n
 }
