@@ -195,8 +195,6 @@ pub trait ErrorCodesBase: Sized + core::fmt::Debug + Eq + PartialEq + core::hash
 }
 
 pub struct AndonLight<T: ErrorCodesBase, const U: usize> {
-    device_state: DeviceState,
-    system_state: SystemState,
     leds_amount: u8,
     brightness: u8,
     speed: u16,
@@ -206,8 +204,6 @@ pub struct AndonLight<T: ErrorCodesBase, const U: usize> {
 impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
     pub const fn new(leds_amount: u8, brightness: u8, speed: u16) -> Self {
         Self {
-            device_state: DeviceState::Ok,
-            system_state: SystemState::Ok,
             codes: heapless::FnvIndexSet::<T, U>::new(),
             leds_amount,
             brightness,
@@ -223,18 +219,8 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
         self.codes.remove(&code);
     }
 
-    #[inline]
-    pub fn set_device_state(&mut self, state: DeviceState) {
-        self.device_state = state;
-    }
-
     pub fn get_speed(&self) -> u16 {
         self.speed
-    }
-
-    #[inline]
-    pub fn set_system_state(&mut self, state: SystemState) {
-        self.system_state = state;
     }
 
     #[inline]
@@ -273,10 +259,46 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
         }
     }
 
+    fn calculate_state(&self) -> (SystemState, DeviceState) {
+        let mut system_error_counter = 0;
+        let mut system_warn_counter = 0;
+        let mut device_error_counter = 0;
+        let mut device_warn_counter = 0;
+        let mut device_idle_counter = 0;
+
+        for code in &self.codes {
+            match code.level() {
+                ErrorType::DeviceIdle => device_idle_counter += 1,
+                ErrorType::DeviceWarn => device_warn_counter += 1,
+                ErrorType::DeviceError => device_error_counter += 1,
+                ErrorType::SystemWarn => system_warn_counter += 1,
+                ErrorType::SystemError => system_error_counter += 1,
+            }
+        }
+        let device_state = if device_error_counter > 0 {
+            DeviceState::Error
+        } else if device_warn_counter > 0 {
+            DeviceState::Warn
+        } else if device_idle_counter > 0 {
+            DeviceState::Idle
+        } else {
+            DeviceState::Ok
+        };
+        let system_state = if system_error_counter > 0 {
+            SystemState::Error
+        } else if system_warn_counter > 0 {
+            SystemState::Warn
+        } else {
+            SystemState::Ok
+        };
+        (system_state, device_state)
+    }
+
     pub async fn signal(&mut self, device: &mut impl OutputSpiDevice) {
+        let (system_state, device_state) = self.calculate_state();
         self.draw_pattern(
             device,
-            collapse(&self.system_state, &self.device_state),
+            collapse(&system_state, &device_state),
             Scaling::Stretch,
         )
         .await;

@@ -179,25 +179,21 @@ async fn run_rgb_probe(
                     andon_light.ok(ErrorCodes::SE003);
                     match color {
                         "Red" | "Pink" | "Magenta" => {
-                            andon_light.set_device_state(andon_light_core::DeviceState::Error);
                             andon_light.mark(ErrorCodes::E001);
                             andon_light.ok(ErrorCodes::I001);
                             andon_light.ok(ErrorCodes::W001);
                         }
                         "Green" | "Mint" | "Lime" => {
-                            andon_light.set_device_state(andon_light_core::DeviceState::Ok);
                             andon_light.ok(ErrorCodes::I001);
                             andon_light.ok(ErrorCodes::E001);
                             andon_light.ok(ErrorCodes::W001);
                         }
                         "Blue" | "Violet" | "Azure" => {
-                            andon_light.set_device_state(andon_light_core::DeviceState::Idle);
                             andon_light.mark(ErrorCodes::I001);
                             andon_light.ok(ErrorCodes::E001);
                             andon_light.ok(ErrorCodes::W001);
                         }
                         _ => {
-                            andon_light.set_device_state(andon_light_core::DeviceState::Warn);
                             andon_light.mark(ErrorCodes::W001);
                             andon_light.ok(ErrorCodes::I001);
                             andon_light.ok(ErrorCodes::E001);
