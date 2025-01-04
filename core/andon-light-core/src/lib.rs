@@ -184,17 +184,17 @@ fn collapse(system: &SystemState, device: &DeviceState) -> Pattern {
     }
 }
 
-pub trait ErrorCodes {
+pub trait ErrorCodesBase: Sized + core::fmt::Debug + Eq + PartialEq + core::hash::Hash {
     const SIZE: usize;
     const MIN_SET_SIZE: usize;
 
-    // fn as_str(&self) -> &'static str;
-    // fn from_str(value: &str) -> Result<Self, &'static str>;
-    // fn description(&self) -> &'static str;
-    // fn level(&self) -> &'static str;
+    fn as_str(&self) -> &'static str;
+    fn from_str(value: &str) -> Result<Self, &'static str>;
+    fn description(&self) -> &'static str;
+    fn level(&self) -> ErrorType;
 }
 
-pub struct AndonLight<T, const U: usize> {
+pub struct AndonLight<T: ErrorCodesBase, const U: usize> {
     device_state: DeviceState,
     system_state: SystemState,
     leds_amount: u8,
@@ -203,7 +203,7 @@ pub struct AndonLight<T, const U: usize> {
     codes: heapless::FnvIndexSet<T, U>,
 }
 
-impl<T, const U: usize> AndonLight<T, U> {
+impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
     pub const fn new(leds_amount: u8, brightness: u8, speed: u16) -> Self {
         Self {
             device_state: DeviceState::Ok,
@@ -213,6 +213,14 @@ impl<T, const U: usize> AndonLight<T, U> {
             brightness,
             speed,
         }
+    }
+
+    pub fn mark(&mut self, code: T) {
+        self.codes.insert(code).unwrap();
+    }
+
+    pub fn ok(&mut self, code: T) {
+        self.codes.remove(&code);
     }
 
     #[inline]

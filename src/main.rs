@@ -4,7 +4,7 @@
 mod prelude;
 use prelude::*;
 
-use andon_light_core::OutputSpiDevice;
+use andon_light_core::{ErrorCodesBase, OutputSpiDevice};
 use andon_light_macros::{generate_default_from_env, ErrorCodesEnum};
 
 use esp_backtrace as _;
@@ -39,10 +39,20 @@ use tcs3472::Tcs3472;
 
 const DEFAULT_LED_AMOUNT: usize = generate_default_from_env!(DEFAULT_LED_AMOUNT, 16);
 
-#[derive(ErrorCodesEnum)]
+#[derive(Debug, Hash, Eq, PartialEq, ErrorCodesEnum)]
 pub enum ErrorCodes {
-    #[code(message = "Error code 1", level = "warn")]
-    ErrorCode1,
+    #[code(message = "Device is idle", level = "idle")]
+    I001,
+    #[code(message = "Device reports warning", level = "warn")]
+    W001,
+    #[code(message = "TCS sensor is unavailable", level = "system_error")]
+    SE001,
+    #[code(message = "Failed to enable TCS sensor", level = "system_error")]
+    SE002,
+    #[code(message = "TCS sensor error", level = "system_error")]
+    SE003,
+    #[code(message = "Device report error", level = "error")]
+    E001,
 }
 
 type AndonLight = andon_light_core::AndonLight<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }>;
@@ -119,14 +129,22 @@ async fn run_rgb_probe(
 ) {
     let mut ticker = Ticker::every(Duration::from_millis(500));
 
-    if let Err(e) = sensor.enable().await {
-        esp_println::dbg!(e);
+    if let Err(_) = sensor.enable().await {
+        let mut andon_light = andon_light.lock().await;
+        andon_light.mark(ErrorCodes::SE001);
         return;
+    } else {
+        let mut andon_light = andon_light.lock().await;
+        andon_light.ok(ErrorCodes::SE001);
     }
 
-    if let Err(e) = sensor.enable_rgbc().await {
-        esp_println::dbg!(e);
+    if let Err(_) = sensor.enable_rgbc().await {
+        let mut andon_light = andon_light.lock().await;
+        andon_light.mark(ErrorCodes::SE002);
         return;
+    } else {
+        let mut andon_light = andon_light.lock().await;
+        andon_light.ok(ErrorCodes::SE002);
     }
 
     while !sensor.is_rgbc_status_valid().await.unwrap() {
@@ -135,8 +153,9 @@ async fn run_rgb_probe(
 
     loop {
         match sensor.read_all_channels().await {
-            Err(e) => {
-                esp_println::dbg!(e);
+            Err(_) => {
+                let mut andon_light = andon_light.lock().await;
+                andon_light.mark(ErrorCodes::SE003);
             }
             Ok(measurement) => {
                 esp_println::println!(
@@ -157,18 +176,31 @@ async fn run_rgb_probe(
                 );
                 {
                     let mut andon_light = andon_light.lock().await;
+                    andon_light.ok(ErrorCodes::SE003);
                     match color {
                         "Red" | "Pink" | "Magenta" => {
                             andon_light.set_device_state(andon_light_core::DeviceState::Error);
+                            andon_light.mark(ErrorCodes::E001);
+                            andon_light.ok(ErrorCodes::I001);
+                            andon_light.ok(ErrorCodes::W001);
                         }
                         "Green" | "Mint" | "Lime" => {
                             andon_light.set_device_state(andon_light_core::DeviceState::Ok);
+                            andon_light.ok(ErrorCodes::I001);
+                            andon_light.ok(ErrorCodes::E001);
+                            andon_light.ok(ErrorCodes::W001);
                         }
                         "Blue" | "Violet" | "Azure" => {
                             andon_light.set_device_state(andon_light_core::DeviceState::Idle);
+                            andon_light.mark(ErrorCodes::I001);
+                            andon_light.ok(ErrorCodes::E001);
+                            andon_light.ok(ErrorCodes::W001);
                         }
                         _ => {
                             andon_light.set_device_state(andon_light_core::DeviceState::Warn);
+                            andon_light.mark(ErrorCodes::W001);
+                            andon_light.ok(ErrorCodes::I001);
+                            andon_light.ok(ErrorCodes::E001);
                         }
                     }
                 }

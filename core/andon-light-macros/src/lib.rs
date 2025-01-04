@@ -130,38 +130,41 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
         level_arms.push(quote::quote! {
             #ident::#variant_ident => #(#segments)::*,
         });
-        // println!("{:?}", level_arms);
     }
 
-    let min_size = next_power_of_2(len);
+    let mut min_size = next_power_of_2(len);
+    // Min size is used later to create FnvIndexSet, so it must be at least 2
+    if min_size < 2 {
+        min_size = 2;
+    }
 
     quote::quote! {
-        impl #ident {
+        impl andon_light_core::ErrorCodesBase for #ident {
             const SIZE: usize = #len;
             const MIN_SET_SIZE: usize = #min_size;
 
-            pub fn as_str(&self) -> &'static str {
+            fn as_str(&self) -> &'static str {
                 match self {
                     #(#to_str_arms)*
                 }
             }
 
-            pub fn from_str(value: &str) -> Result<Self, &'static str> {
-                match value {
-                    #(#from_str_arms)*
-                    _ => Err("Unknown error code"),
+            fn level(&self) -> andon_light_core::ErrorType {
+                match self {
+                    #(#level_arms)*
                 }
             }
 
-            pub fn description(&self) -> &'static str {
+            fn description(&self) -> &'static str {
                 match self {
                     #(#description_arms)*
                 }
             }
 
-            pub fn level(&self) -> andon_light_core::ErrorType {
-                match self {
-                    #(#level_arms)*
+            fn from_str(value: &str) -> Result<Self, &'static str> {
+                match value {
+                    #(#from_str_arms)*
+                    _ => Err("Unknown error code"),
                 }
             }
         }
@@ -214,10 +217,6 @@ pub fn generate_default_from_env(input: TokenStream) -> TokenStream {
 
 fn next_power_of_2(n: usize) -> usize {
     let mut n = n;
-    if n < 2 {
-        return 2;
-    }
-
     n -= 1;
     n |= n >> 1;
     n |= n >> 2;
