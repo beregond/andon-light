@@ -9,6 +9,7 @@ fn main() {
 }
 
 fn touch_file(file_path: &str) -> std::io::Result<()> {
+    // Simple way to touch a file that is cross-platfom
     // Step 1: Remove the file if it exists
     if let Err(e) = remove_file(file_path) {
         panic!("File not found or failed to remove: {}", e);

@@ -5,7 +5,7 @@ mod prelude;
 use prelude::*;
 
 use andon_light_core::{AndonLight, OutputSpiDevice};
-use andon_light_macros::generate_default_from_env;
+use andon_light_macros::{generate_default_from_env, ErrorCodesEnum};
 
 use esp_backtrace as _;
 use esp_hal::{
@@ -42,6 +42,12 @@ const DEFAULT_LED_AMOUNT: usize = generate_default_from_env!(DEFAULT_LED_AMOUNT,
 const CONFIG_BUFFER_SIZE: usize = 4096;
 type Spi2Bus = Mutex<NoopRawMutex, SpiDmaBus<'static, SPI2, DmaChannel0, FullDuplexMode, Async>>;
 type AndonAsyncMutex = Mutex<CriticalSectionRawMutex, AndonLight>;
+
+#[derive(ErrorCodesEnum)]
+pub enum ErrorCodes {
+    #[code(message = "Error code 1", level = "warn")]
+    ErrorCode1,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
@@ -233,6 +239,8 @@ async fn main(spawner: Spawner) {
         esp_println::println!("config read properly");
         leds_amount = config.core_config.leds_amount;
     }
+
+    esp_println::println!("Level: {}", ErrorCodes::ErrorCode1.level());
 
     let spi_dev = SpiDev {
         device: SpiDevice::new(spi_bus, leds_select),

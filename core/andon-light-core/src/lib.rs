@@ -155,6 +155,14 @@ pub enum SystemState {
     Error,
 }
 
+pub enum ErrorType {
+    DeviceIdle,
+    DeviceWarn,
+    DeviceError,
+    SystemWarn,
+    SystemError,
+}
+
 enum Scaling {
     Stretch,
     Repeat,
