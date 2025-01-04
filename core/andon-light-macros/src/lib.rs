@@ -1,4 +1,4 @@
-use proc_macro::TokenStream;
+use proc_macro::{TokenStream, TokenTree};
 use syn::DeriveInput;
 
 // Highly inspired by strum_macros
@@ -100,4 +100,47 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+// Currently supporting only strings and integers
+// DISCLAIMER: This is a very naive implementation and makes a lot of assumptions!
+// If anything breaks - be sure you check you env vars
+#[proc_macro]
+pub fn generate_default_from_env(input: TokenStream) -> TokenStream {
+    let tokens = input.into_iter().collect::<Vec<_>>();
+    match &tokens[..] {
+        [TokenTree::Ident(ident), TokenTree::Punct(punct), TokenTree::Literal(literal)] => {
+            if punct.to_string() != "," {
+                panic!("Wrong format, try (<<ENV_VAR_NAME>>, <<DEFAULT_VALUE>>)");
+            }
+            let ident = ident.to_string();
+            let env_value = std::env::var(ident);
+
+            let literal = literal.to_string();
+
+            match literal {
+                payload if payload.starts_with("\"") && payload.ends_with("\"") => {
+                    let default_value = payload.trim_matches('"');
+                    let value = env_value.unwrap_or_else(|_| default_value.to_string());
+                    quote::quote! {
+                        #value
+                    }
+                    .into()
+                }
+                payload => {
+                    let value = env_value
+                        .unwrap_or_else(|_| payload.to_string())
+                        .parse::<usize>()
+                        .unwrap();
+                    quote::quote! {
+                        #value
+                    }
+                    .into()
+                }
+            }
+        }
+        _ => {
+            panic!("Wrong format, try (<<ENV_VAR_NAME>>, <<DEFAULT_VALUE>>)");
+        }
+    }
 }

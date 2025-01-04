@@ -5,7 +5,7 @@ mod prelude;
 use prelude::*;
 
 use andon_light_core::{AndonLight, OutputSpiDevice};
-use andon_light_macros::ErrorCodes;
+use andon_light_macros::generate_default_from_env;
 
 use esp_backtrace as _;
 use esp_hal::{
@@ -36,6 +36,8 @@ use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 
 use tcs3472::Tcs3472;
+
+const DEFAULT_LED_AMOUNT: usize = generate_default_from_env!(DEFAULT_LED_AMOUNT, 16);
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 type Spi2Bus = Mutex<NoopRawMutex, SpiDmaBus<'static, SPI2, DmaChannel0, FullDuplexMode, Async>>;
@@ -217,7 +219,7 @@ async fn main(spawner: Spawner) {
             .with_buffers(dma_tx_buf, dma_rx_buf);
 
     let sd_select = Output::new(io.pins.gpio2, Level::High);
-    let mut leds_amount: u8 = 16;
+    let mut leds_amount: u8 = DEFAULT_LED_AMOUNT as u8;
     let mut buffer = [0u8; CONFIG_BUFFER_SIZE];
 
     static SPI_BUS: StaticCell<Spi2Bus> = StaticCell::new();
