@@ -211,11 +211,11 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
         }
     }
 
-    pub fn mark(&mut self, code: T) {
+    pub fn notify(&mut self, code: T) {
         self.codes.insert(code).unwrap();
     }
 
-    pub fn ok(&mut self, code: T) {
+    pub fn resolve(&mut self, code: T) {
         self.codes.remove(&code);
     }
 
@@ -325,6 +325,7 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
     async fn send_color(&mut self, spi: &mut impl OutputSpiDevice, color: &Color) {
         // Priming spi as leds eat first byte ¯\_(ツ)_/¯
         spi.write(&[0b0]).await.unwrap();
+        // ...and displaying actual colors
         let data = to_bytes(color.g);
         spi.write(&data).await.unwrap();
         let data = to_bytes(color.r);

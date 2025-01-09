@@ -129,22 +129,27 @@ async fn run_rgb_probe(
 ) {
     let mut ticker = Ticker::every(Duration::from_millis(500));
 
-    if let Err(_) = sensor.enable().await {
-        let mut andon_light = andon_light.lock().await;
-        andon_light.mark(ErrorCodes::SE001);
-        return;
-    } else {
-        let mut andon_light = andon_light.lock().await;
-        andon_light.ok(ErrorCodes::SE001);
+    match (
+        sensor.enable().await,
+        andon_light.lock().await,
+        ErrorCodes::SE001,
+    ) {
+        (Err(_), mut andon_light, code) => {
+            andon_light.notify(code);
+            return;
+        }
+        (Ok(_), mut andon_light, code) => {
+            andon_light.resolve(code);
+        }
     }
 
     if let Err(_) = sensor.enable_rgbc().await {
         let mut andon_light = andon_light.lock().await;
-        andon_light.mark(ErrorCodes::SE002);
+        andon_light.notify(ErrorCodes::SE002);
         return;
     } else {
         let mut andon_light = andon_light.lock().await;
-        andon_light.ok(ErrorCodes::SE002);
+        andon_light.resolve(ErrorCodes::SE002);
     }
 
     while !sensor.is_rgbc_status_valid().await.unwrap() {
@@ -155,7 +160,7 @@ async fn run_rgb_probe(
         match sensor.read_all_channels().await {
             Err(_) => {
                 let mut andon_light = andon_light.lock().await;
-                andon_light.mark(ErrorCodes::SE003);
+                andon_light.notify(ErrorCodes::SE003);
             }
             Ok(measurement) => {
                 esp_println::println!(
@@ -176,27 +181,27 @@ async fn run_rgb_probe(
                 );
                 {
                     let mut andon_light = andon_light.lock().await;
-                    andon_light.ok(ErrorCodes::SE003);
+                    andon_light.resolve(ErrorCodes::SE003);
                     match color {
                         "Red" | "Pink" | "Magenta" => {
-                            andon_light.mark(ErrorCodes::E001);
-                            andon_light.ok(ErrorCodes::I001);
-                            andon_light.ok(ErrorCodes::W001);
+                            andon_light.notify(ErrorCodes::E001);
+                            andon_light.resolve(ErrorCodes::I001);
+                            andon_light.resolve(ErrorCodes::W001);
                         }
                         "Green" | "Mint" | "Lime" => {
-                            andon_light.ok(ErrorCodes::I001);
-                            andon_light.ok(ErrorCodes::E001);
-                            andon_light.ok(ErrorCodes::W001);
+                            andon_light.resolve(ErrorCodes::I001);
+                            andon_light.resolve(ErrorCodes::E001);
+                            andon_light.resolve(ErrorCodes::W001);
                         }
                         "Blue" | "Violet" | "Azure" => {
-                            andon_light.mark(ErrorCodes::I001);
-                            andon_light.ok(ErrorCodes::E001);
-                            andon_light.ok(ErrorCodes::W001);
+                            andon_light.notify(ErrorCodes::I001);
+                            andon_light.resolve(ErrorCodes::E001);
+                            andon_light.resolve(ErrorCodes::W001);
                         }
                         _ => {
-                            andon_light.mark(ErrorCodes::W001);
-                            andon_light.ok(ErrorCodes::I001);
-                            andon_light.ok(ErrorCodes::E001);
+                            andon_light.notify(ErrorCodes::W001);
+                            andon_light.resolve(ErrorCodes::I001);
+                            andon_light.resolve(ErrorCodes::E001);
                         }
                     }
                 }
