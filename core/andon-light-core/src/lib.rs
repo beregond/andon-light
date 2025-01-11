@@ -157,6 +157,7 @@ pub enum SystemState {
 
 #[derive(Debug)]
 pub enum ErrorType {
+    Ok,
     DeviceIdle,
     DeviceWarn,
     DeviceError,
@@ -185,7 +186,6 @@ fn collapse(system: &SystemState, device: &DeviceState) -> Pattern {
 }
 
 pub trait ErrorCodesBase: Sized + core::fmt::Debug + Eq + PartialEq + core::hash::Hash {
-    const SIZE: usize;
     const MIN_SET_SIZE: usize;
 
     fn as_str(&self) -> &'static str;
@@ -212,6 +212,9 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
     }
 
     pub fn notify(&mut self, code: T) {
+        if let ErrorType::Ok = code.level() {
+            return;
+        }
         self.codes.insert(code).unwrap();
     }
 
@@ -225,6 +228,9 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
                 continue;
             }
             self.codes.remove(&item);
+        }
+        if let ErrorType::Ok = code.level() {
+            return;
         }
         self.codes.insert(code).unwrap();
     }
@@ -289,6 +295,7 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
                 ErrorType::DeviceError => device_error_counter += 1,
                 ErrorType::SystemWarn => system_warn_counter += 1,
                 ErrorType::SystemError => system_error_counter += 1,
+                ErrorType::Ok => {}
             }
         }
         let device_state = if device_error_counter > 0 {

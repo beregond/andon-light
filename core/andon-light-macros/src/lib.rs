@@ -14,16 +14,12 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
         _ => panic!("ErrorCodes works only on Enums"),
     };
 
-    let len = variants.len();
-
-    if len < 1 {
-        panic!("ErrorCodes must have at least one variant");
-    }
-
     let mut to_str_arms = Vec::new();
     let mut from_str_arms = Vec::new();
     let mut description_arms = Vec::new();
     let mut level_arms = Vec::new();
+
+    let mut codes_amount: usize = 0;
 
     for variant in variants {
         let variant_ident = &variant.ident;
@@ -101,7 +97,8 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
                     "error" => "DeviceError",
                     "system_warn" => "SystemWarn",
                     "system_error" => "SystemError",
-                    _ => panic!("ErrorCodes level attribute must be one of: idle, warn, error, system_warn, system_error")
+                    "ok" => "Ok",
+                    _ => panic!("ErrorCodes level attribute must be one of: ok, idle, warn, error, system_warn, system_error")
                 };
                 enum_path.to_string()
             }
@@ -109,6 +106,14 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
                 "All variants of ErrorCodes must have a level attribute (#[code(level = \"...\")])"
             ),
         };
+
+        // Counting all not 'ok' codes - codes that we will actually store in codes storage
+        match level.as_str() {
+            "Ok" => {}
+            _ => {
+                codes_amount += 1;
+            }
+        }
 
         to_str_arms.push(quote::quote! {
             #ident::#variant_ident => #variant_stringified,
@@ -132,7 +137,11 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
         });
     }
 
-    let mut min_size = next_power_of_2(len);
+    if codes_amount < 1 {
+        panic!("ErrorCodes must have at least one variant, that is not above 'ok' level");
+    }
+
+    let mut min_size = next_power_of_2(codes_amount);
     // Min size is used later to create FnvIndexSet, so it must be at least 2
     if min_size < 2 {
         min_size = 2;
@@ -140,7 +149,6 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
 
     quote::quote! {
         impl andon_light_core::ErrorCodesBase for #ident {
-            const SIZE: usize = #len;
             const MIN_SET_SIZE: usize = #min_size;
 
             fn as_str(&self) -> &'static str {

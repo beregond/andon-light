@@ -41,6 +41,8 @@ const DEFAULT_LED_AMOUNT: usize = generate_default_from_env!(DEFAULT_LED_AMOUNT,
 
 #[derive(Debug, Hash, Eq, PartialEq, ErrorCodesEnum)]
 pub enum ErrorCodes {
+    #[code(message = "Ok", level = "ok")]
+    Ok,
     #[code(message = "Device is idle", level = "idle")]
     I001,
     #[code(message = "Device reports warning", level = "warn")]
@@ -100,7 +102,11 @@ async fn blink_led(mut led: Output<'static, GpioPin<4>>) {
 async fn run_andon_light(
     mut device: (impl OutputSpiDevice + 'static),
     andon_light: &'static AndonAsyncMutex,
+    mut led_reset: Output<'static, GpioPin<20>>,
 ) {
+    led_reset.set_high();
+    led_reset.set_low();
+
     {
         let mut andon_light = andon_light.lock().await;
 
@@ -196,20 +202,13 @@ async fn rgb_probe_task(
                         {
                             let mut andon_light = andon_light.lock().await;
                             andon_light.resolve(ErrorCodes::SE003);
-                            match color {
-                                "Red" | "Pink" | "Magenta" => {
-                                    andon_light.notify_exclusive(ErrorCodes::E001, &exclusive);
-                                }
-                                "Green" | "Mint" | "Lime" => {
-                                    andon_light.resolve_all(&exclusive);
-                                }
-                                "Blue" | "Violet" | "Azure" => {
-                                    andon_light.notify_exclusive(ErrorCodes::I001, &exclusive);
-                                }
-                                _ => {
-                                    andon_light.notify_exclusive(ErrorCodes::W001, &exclusive);
-                                }
-                            }
+                            let error_code = match color {
+                                "Green" | "Mint" | "Lime" => ErrorCodes::Ok,
+                                "Blue" | "Violet" | "Azure" => ErrorCodes::I001,
+                                "Red" | "Pink" | "Magenta" => ErrorCodes::E001,
+                                _ => ErrorCodes::W001,
+                            };
+                            andon_light.notify_exclusive(error_code, &exclusive);
                         }
                     }
                 }
@@ -289,11 +288,13 @@ async fn main(spawner: Spawner) {
         device: SpiDevice::new(spi_bus, leds_select),
     };
 
+    let led_reset = Output::new(io.pins.gpio20, Level::High);
+
     static ANDON: StaticCell<AndonAsyncMutex> = StaticCell::new();
     let andon_light = ANDON.init(Mutex::new(AndonLight::new(leds_amount, 10, 150)));
 
     spawner
-        .spawn(run_andon_light(spi_dev, andon_light))
+        .spawn(run_andon_light(spi_dev, andon_light, led_reset))
         .unwrap();
 
     // Create a new peripheral object with the described wiring
