@@ -123,91 +123,100 @@ async fn run_andon_light(
 }
 
 #[embassy_executor::task]
-async fn run_rgb_probe(
+async fn rgb_probe_task(
     mut sensor: Tcs3472<I2C<'static, I2C0, Async>>,
     andon_light: &'static AndonAsyncMutex,
 ) {
     let mut ticker = Ticker::every(Duration::from_millis(500));
 
-    match (
-        sensor.enable().await,
-        andon_light.lock().await,
-        ErrorCodes::SE001,
-    ) {
-        (Err(_), mut andon_light, code) => {
-            andon_light.notify(code);
-            return;
-        }
-        (Ok(_), mut andon_light, code) => {
-            andon_light.resolve(code);
-        }
-    }
-
-    if let Err(_) = sensor.enable_rgbc().await {
-        let mut andon_light = andon_light.lock().await;
-        andon_light.notify(ErrorCodes::SE002);
-        return;
-    } else {
-        let mut andon_light = andon_light.lock().await;
-        andon_light.resolve(ErrorCodes::SE002);
-    }
-
-    while !sensor.is_rgbc_status_valid().await.unwrap() {
-        // wait for measurement to be available
-    }
-
     loop {
-        match sensor.read_all_channels().await {
-            Err(_) => {
-                let mut andon_light = andon_light.lock().await;
-                andon_light.notify(ErrorCodes::SE003);
+        'setup: loop {
+            match (
+                sensor.enable().await,
+                andon_light.lock().await,
+                ErrorCodes::SE001,
+            ) {
+                (Err(_), mut andon_light, code) => {
+                    andon_light.notify(code);
+                    break 'setup;
+                }
+                (Ok(_), mut andon_light, code) => {
+                    andon_light.resolve(code);
+                }
             }
-            Ok(measurement) => {
-                esp_println::println!(
-                    "Raw values: {:.2} ({:.2}, {:.2}, {:.2}) ",
-                    measurement.clear,
-                    measurement.red,
-                    measurement.green,
-                    measurement.blue,
-                );
-                let (r, g, b, color) =
-                    normalize_rgb(measurement.red, measurement.green, measurement.blue);
-                esp_println::println!(
-                    "Normalized RGB: ({:.2}, {:.2}, {:.2}) -> Basic Color: {}",
-                    r,
-                    g,
-                    b,
-                    color,
-                );
-                {
-                    let mut andon_light = andon_light.lock().await;
-                    andon_light.resolve(ErrorCodes::SE003);
-                    match color {
-                        "Red" | "Pink" | "Magenta" => {
-                            andon_light.notify(ErrorCodes::E001);
-                            andon_light.resolve(ErrorCodes::I001);
-                            andon_light.resolve(ErrorCodes::W001);
-                        }
-                        "Green" | "Mint" | "Lime" => {
-                            andon_light.resolve(ErrorCodes::I001);
-                            andon_light.resolve(ErrorCodes::E001);
-                            andon_light.resolve(ErrorCodes::W001);
-                        }
-                        "Blue" | "Violet" | "Azure" => {
-                            andon_light.notify(ErrorCodes::I001);
-                            andon_light.resolve(ErrorCodes::E001);
-                            andon_light.resolve(ErrorCodes::W001);
-                        }
-                        _ => {
-                            andon_light.notify(ErrorCodes::W001);
-                            andon_light.resolve(ErrorCodes::I001);
-                            andon_light.resolve(ErrorCodes::E001);
+
+            match (
+                sensor.enable_rgbc().await,
+                andon_light.lock().await,
+                ErrorCodes::SE002,
+            ) {
+                (Err(_), mut andon_light, code) => {
+                    andon_light.notify(code);
+                    break 'setup;
+                }
+                (Ok(_), mut andon_light, code) => {
+                    andon_light.resolve(code);
+                }
+            }
+
+            while !sensor.is_rgbc_status_valid().await.unwrap() {
+                // wait for measurement to be available
+            }
+
+            let mut exclusive = heapless::Vec::<_, 4>::new();
+            exclusive.push(ErrorCodes::SE003).unwrap();
+            exclusive.push(ErrorCodes::E001).unwrap();
+            exclusive.push(ErrorCodes::I001).unwrap();
+            exclusive.push(ErrorCodes::W001).unwrap();
+
+            loop {
+                match sensor.read_all_channels().await {
+                    Err(_) => {
+                        let mut andon_light = andon_light.lock().await;
+                        andon_light.notify(ErrorCodes::SE003);
+                        break 'setup;
+                    }
+                    Ok(measurement) => {
+                        esp_println::println!(
+                            "Raw values: {:.2} ({:.2}, {:.2}, {:.2}) ",
+                            measurement.clear,
+                            measurement.red,
+                            measurement.green,
+                            measurement.blue,
+                        );
+                        let (r, g, b, color) =
+                            normalize_rgb(measurement.red, measurement.green, measurement.blue);
+                        esp_println::println!(
+                            "Normalized RGB: ({:.2}, {:.2}, {:.2}) -> Basic Color: {}",
+                            r,
+                            g,
+                            b,
+                            color,
+                        );
+                        {
+                            let mut andon_light = andon_light.lock().await;
+                            andon_light.resolve(ErrorCodes::SE003);
+                            match color {
+                                "Red" | "Pink" | "Magenta" => {
+                                    andon_light.notify_exclusive(ErrorCodes::E001, &exclusive);
+                                }
+                                "Green" | "Mint" | "Lime" => {
+                                    andon_light.resolve_all(&exclusive);
+                                }
+                                "Blue" | "Violet" | "Azure" => {
+                                    andon_light.notify_exclusive(ErrorCodes::I001, &exclusive);
+                                }
+                                _ => {
+                                    andon_light.notify_exclusive(ErrorCodes::W001, &exclusive);
+                                }
+                            }
                         }
                     }
                 }
+
+                ticker.next().await;
             }
         }
-
         ticker.next().await;
     }
 }
@@ -270,6 +279,7 @@ async fn main(spawner: Spawner) {
     let result = sd_reader
         .read_config::<Config>("CONFIG.JSO", &mut buffer)
         .await;
+
     if let Some(config) = result {
         esp_println::println!("config read properly");
         leds_amount = config.core_config.leds_amount;
@@ -296,7 +306,7 @@ async fn main(spawner: Spawner) {
         &clocks,
     );
     let sensor = Tcs3472::new(i2c);
-    spawner.spawn(run_rgb_probe(sensor, andon_light)).unwrap();
+    spawner.spawn(rgb_probe_task(sensor, andon_light)).unwrap();
 }
 
 enum ColorLevel {

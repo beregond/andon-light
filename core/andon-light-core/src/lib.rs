@@ -219,6 +219,22 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
         self.codes.remove(&code);
     }
 
+    pub fn notify_exclusive<const W: usize>(&mut self, code: T, exclusive: &heapless::Vec<T, W>) {
+        for item in exclusive {
+            if *item == code {
+                continue;
+            }
+            self.codes.remove(&item);
+        }
+        self.codes.insert(code).unwrap();
+    }
+
+    pub fn resolve_all<const W: usize>(&mut self, codes: &heapless::Vec<T, W>) {
+        for code in codes {
+            self.codes.remove(code);
+        }
+    }
+
     pub fn get_speed(&self) -> u16 {
         self.speed
     }
