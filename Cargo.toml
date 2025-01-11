@@ -13,9 +13,13 @@ esp-backtrace = { version = "0.14.0", features = [
   "panic-handler",
   "println",
 ] }
-esp-hal = { version = "0.20.1", features = ["esp32c3", "async", "embedded-hal"] }
+esp-hal = { version = "0.20.1", features = [
+  "esp32c3",
+  "async",
+  "embedded-hal",
+] }
 esp-println = { version = "0.11.0", features = ["esp32c3", "log"] }
-log = { version = "0.4.21" }
+log = "0.4.21"
 embedded-io = "0.6.1"
 esp-wifi = { version = "0.8.0", features = [
   "esp32c3",

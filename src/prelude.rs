@@ -97,7 +97,11 @@ impl<'a, M: RawMutex, BUS: embedded_hal::spi::SpiBus, CS: OutputPin> SdReader<'a
         Self { bus, cs, delay }
     }
 
-    pub async fn read_config<'de, T>(self, filename: &str, buffer: &'de mut [u8]) -> Option<T>
+    pub async fn read_config<'de, T>(
+        self,
+        filename: &str,
+        buffer: &'de mut [u8],
+    ) -> Result<Option<T>, ()>
     where
         T: Default + serde::Deserialize<'de>,
     {
@@ -115,13 +119,14 @@ impl<'a, M: RawMutex, BUS: embedded_hal::spi::SpiBus, CS: OutputPin> SdReader<'a
             let num_read = my_file.read(buffer).unwrap();
             match serde_json_core::de::from_slice::<T>(&buffer[0..num_read]) {
                 Ok((result, _)) => {
-                    return Some(result);
+                    return Ok(Some(result));
                 }
                 Err(e) => {
-                    esp_println::println!("{:?}", e);
+                    log::error!("{:?}", e);
+                    return Err(());
                 }
             }
         };
-        None
+        Ok(None)
     }
 }

@@ -2,6 +2,7 @@
 #![no_main]
 
 mod prelude;
+use log;
 use prelude::*;
 
 use andon_light_core::{ErrorCodesBase, OutputSpiDevice};
@@ -183,16 +184,9 @@ async fn rgb_probe_task(
                         break 'setup;
                     }
                     Ok(measurement) => {
-                        esp_println::println!(
-                            "Raw values: {:.2} ({:.2}, {:.2}, {:.2}) ",
-                            measurement.clear,
-                            measurement.red,
-                            measurement.green,
-                            measurement.blue,
-                        );
                         let (r, g, b, color) =
                             normalize_rgb(measurement.red, measurement.green, measurement.blue);
-                        esp_println::println!(
+                        log::debug!(
                             "Normalized RGB: ({:.2}, {:.2}, {:.2}) -> Basic Color: {}",
                             r,
                             g,
@@ -222,13 +216,14 @@ async fn rgb_probe_task(
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
+    esp_println::logger::init_logger_from_env();
+    log::info!("Hello world!");
+
     let peripherals = Peripherals::take();
     let system = SystemControl::new(peripherals.SYSTEM);
 
     let clocks = ClockControl::max(system.clock_control).freeze();
     let delay = Delay::new(&clocks);
-
-    esp_println::logger::init_logger_from_env();
 
     let timg0 = TimerGroup::new(peripherals.TIMG0, &clocks);
     // let _init = esp_wifi::initialize(
@@ -275,14 +270,25 @@ async fn main(spawner: Spawner) {
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
 
     let sd_reader = SdReader::new(spi_bus, sd_select, delay);
+    // TODO: Need better support for config errors
     let result = sd_reader
         .read_config::<Config>("CONFIG.JSO", &mut buffer)
         .await;
 
-    if let Some(config) = result {
-        esp_println::println!("config read properly");
-        leds_amount = config.core_config.leds_amount;
+    match result {
+        Ok(maybe_result) => {
+            if let Some(config) = maybe_result {
+                log::debug!("Config read properly from file");
+                leds_amount = config.core_config.leds_amount;
+            } else {
+                log::debug!("Seems there is no config file, falling back to default");
+            }
+        }
+        Err(_) => {
+            log::error!("Failed to read config file");
+        }
     }
+    log::debug!("End of config read");
 
     let spi_dev = SpiDev {
         device: SpiDevice::new(spi_bus, leds_select),
@@ -371,7 +377,6 @@ fn map_one(value: u16) -> ColorLevel {
 
 fn normalize_rgb(red: u16, green: u16, blue: u16) -> (u16, u16, u16, &'static str) {
     let max = max_of_three(red, green, blue);
-    esp_println::println!("{:?}", max);
     if max == 0 {
         return (0, 0, 0, "Black");
     }
