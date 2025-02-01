@@ -105,19 +105,21 @@ async fn run_andon_light(
     andon_light: &'static AndonAsyncMutex,
     mut led_reset: Output<'static, GpioPin<20>>,
 ) {
+    log::debug!("Resetting leds");
     led_reset.set_high();
     led_reset.set_low();
 
     {
+        log::debug!("Start of test procedure");
         let mut andon_light = andon_light.lock().await;
 
-        // Test procedure
         andon_light.run_test_procedure(&mut device).await;
         andon_light.signal(&mut device).await;
         Timer::after(Duration::from_millis(andon_light.get_speed() as u64)).await;
+        log::debug!("End of test procedure");
     }
 
-    // Regular operation
+    log::debug!("Entering regular cycle");
     loop {
         let pause: u64;
         {
@@ -137,7 +139,7 @@ async fn rgb_probe_task(
     let mut ticker = Ticker::every(Duration::from_millis(500));
 
     loop {
-        'setup: loop {
+        loop {
             match (
                 sensor.enable().await,
                 andon_light.lock().await,
@@ -145,7 +147,7 @@ async fn rgb_probe_task(
             ) {
                 (Err(_), mut andon_light, code) => {
                     andon_light.notify(code);
-                    break 'setup;
+                    break;
                 }
                 (Ok(_), mut andon_light, code) => {
                     andon_light.resolve(code);
@@ -159,7 +161,7 @@ async fn rgb_probe_task(
             ) {
                 (Err(_), mut andon_light, code) => {
                     andon_light.notify(code);
-                    break 'setup;
+                    break;
                 }
                 (Ok(_), mut andon_light, code) => {
                     andon_light.resolve(code);
@@ -181,7 +183,7 @@ async fn rgb_probe_task(
                     Err(_) => {
                         let mut andon_light = andon_light.lock().await;
                         andon_light.notify(ErrorCodes::SE003);
-                        break 'setup;
+                        break;
                     }
                     Ok(measurement) => {
                         let (r, g, b, color) =
@@ -206,9 +208,9 @@ async fn rgb_probe_task(
                         }
                     }
                 }
-
                 ticker.next().await;
             }
+            ticker.next().await;
         }
         ticker.next().await;
     }
@@ -246,7 +248,7 @@ async fn main(spawner: Spawner) {
     let mosi = io.pins.gpio10;
     // TODO make it actually static
     let leds_select = ControlPin {
-        pin: Output::new(io.pins.gpio3, Level::High),
+        pin: Output::new(io.pins.gpio5, Level::High),
     };
 
     let dma = Dma::new(peripherals.DMA);
@@ -269,6 +271,8 @@ async fn main(spawner: Spawner) {
     static SPI_BUS: StaticCell<Spi2Bus> = StaticCell::new();
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
 
+    log::debug!("Peripherals initialized");
+    log::debug!("Reading config from SD card");
     let sd_reader = SdReader::new(spi_bus, sd_select, delay);
     // TODO: Need better support for config errors
     let result = sd_reader
@@ -280,6 +284,7 @@ async fn main(spawner: Spawner) {
             if let Some(config) = maybe_result {
                 log::debug!("Config read properly from file");
                 leds_amount = config.core_config.leds_amount;
+                log::debug!("Leds amound set to {}", leds_amount);
             } else {
                 log::debug!("Seems there is no config file, falling back to default");
             }
@@ -290,6 +295,7 @@ async fn main(spawner: Spawner) {
     }
     log::debug!("End of config read");
 
+    log::debug!("Starting up leds control");
     let spi_dev = SpiDev {
         device: SpiDevice::new(spi_bus, leds_select),
     };
@@ -302,6 +308,8 @@ async fn main(spawner: Spawner) {
     spawner
         .spawn(run_andon_light(spi_dev, andon_light, led_reset))
         .unwrap();
+
+    log::debug!("Leds started");
 
     // Create a new peripheral object with the described wiring
     // and standard I2C clock speed
