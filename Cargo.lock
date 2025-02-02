@@ -1313,7 +1313,9 @@ dependencies = [
 
 [[package]]
 name = "tcs3472"
-version = "0.2.0"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c28d904208649e23bc953bbfa2713765728b27a065f3050ac9e8f04e6aa1063"
 dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
