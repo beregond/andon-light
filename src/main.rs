@@ -16,6 +16,11 @@ use esp_hal::{
     dma_buffers,
     gpio::{GpioPin, Io, Level, Output, NO_PIN},
     i2c::I2C,
+    ledc::{
+        channel::{self, ChannelIFace},
+        timer::{self, TimerIFace},
+        LSGlobalClkSource, Ledc, LowSpeed,
+    },
     peripherals::Peripherals,
     peripherals::{I2C0, SPI2},
     prelude::*,
@@ -91,15 +96,6 @@ impl Default for CoreConfig {
 }
 
 #[embassy_executor::task]
-async fn blink_led(mut led: Output<'static, GpioPin<4>>) {
-    led.set_high();
-    loop {
-        Timer::after(Duration::from_millis(100)).await;
-        led.toggle();
-    }
-}
-
-#[embassy_executor::task]
 async fn run_andon_light(
     mut device: SpiDev<'static, GpioPin<5>>,
     andon_light: &'static AndonAsyncMutex,
@@ -139,7 +135,7 @@ async fn rgb_probe_task(
     let mut ticker = Ticker::every(Duration::from_millis(500));
 
     loop {
-        loop {
+        'main: loop {
             match (
                 sensor.enable().await,
                 andon_light.lock().await,
@@ -147,7 +143,7 @@ async fn rgb_probe_task(
             ) {
                 (Err(_), mut andon_light, code) => {
                     andon_light.notify(code);
-                    break;
+                    break 'main;
                 }
                 (Ok(_), mut andon_light, code) => {
                     andon_light.resolve(code);
@@ -161,7 +157,7 @@ async fn rgb_probe_task(
             ) {
                 (Err(_), mut andon_light, code) => {
                     andon_light.notify(code);
-                    break;
+                    break 'main;
                 }
                 (Ok(_), mut andon_light, code) => {
                     andon_light.resolve(code);
@@ -178,12 +174,12 @@ async fn rgb_probe_task(
             exclusive.push(ErrorCodes::I001).unwrap();
             exclusive.push(ErrorCodes::W001).unwrap();
 
-            loop {
+            'inner: loop {
                 match sensor.read_all_channels().await {
                     Err(_) => {
                         let mut andon_light = andon_light.lock().await;
                         andon_light.notify(ErrorCodes::SE003);
-                        break;
+                        break 'inner;
                     }
                     Ok(measurement) => {
                         let (r, g, b, color) =
@@ -240,8 +236,6 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(&clocks, timg0.timer0);
 
     let io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
-    let led = Output::new(io.pins.gpio4, Level::High);
-    spawner.spawn(blink_led(led)).unwrap();
 
     let sclk = io.pins.gpio8;
     let miso = io.pins.gpio9;
@@ -322,6 +316,41 @@ async fn main(spawner: Spawner) {
     );
     let sensor = Tcs3472::new(i2c);
     spawner.spawn(rgb_probe_task(sensor, andon_light)).unwrap();
+
+    let led = io.pins.gpio4;
+    let mut ledc = Ledc::new(peripherals.LEDC, &clocks);
+
+    ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
+
+    let mut lstimer0 = ledc.get_timer::<LowSpeed>(timer::Number::Timer0);
+
+    lstimer0
+        .configure(timer::config::Config {
+            duty: timer::config::Duty::Duty5Bit,
+            clock_source: timer::LSClockSource::APBClk,
+            frequency: 24.kHz(),
+        })
+        .unwrap();
+
+    let mut channel0 = ledc.get_channel(channel::Number::Channel0, led);
+    channel0
+        .configure(channel::config::Config {
+            timer: &lstimer0,
+            duty_pct: 10,
+            pin_config: channel::config::PinConfig::PushPull,
+        })
+        .unwrap();
+    channel0.set_duty(70).unwrap();
+    Timer::after(Duration::from_millis(300)).await;
+
+    loop {
+        channel0.start_duty_fade(70, 10, 100).unwrap();
+        Timer::after(Duration::from_millis(100)).await;
+        channel0.start_duty_fade(10, 90, 100).unwrap();
+        Timer::after(Duration::from_millis(100)).await;
+        channel0.start_duty_fade(90, 70, 100).unwrap();
+        Timer::after(Duration::from_millis(800)).await;
+    }
 }
 
 enum ColorLevel {
