@@ -340,15 +340,15 @@ async fn main(spawner: Spawner) {
             pin_config: channel::config::PinConfig::PushPull,
         })
         .unwrap();
-    channel0.set_duty(70).unwrap();
+    channel0.set_duty(30).unwrap();
     Timer::after(Duration::from_millis(300)).await;
 
     loop {
-        channel0.start_duty_fade(70, 10, 100).unwrap();
+        channel0.start_duty_fade(30, 90, 100).unwrap();
         Timer::after(Duration::from_millis(100)).await;
-        channel0.start_duty_fade(10, 90, 100).unwrap();
+        channel0.start_duty_fade(90, 10, 100).unwrap();
         Timer::after(Duration::from_millis(100)).await;
-        channel0.start_duty_fade(90, 70, 100).unwrap();
+        channel0.start_duty_fade(10, 30, 100).unwrap();
         Timer::after(Duration::from_millis(800)).await;
     }
 }
