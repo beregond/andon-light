@@ -5,7 +5,7 @@ mod prelude;
 use log;
 use prelude::*;
 
-use andon_light_core::{ErrorCodesBase, OutputSpiDevice};
+use andon_light_core::ErrorCodesBase;
 use andon_light_macros::{generate_default_from_env, ErrorCodesEnum};
 
 use esp_backtrace as _;
@@ -101,7 +101,7 @@ async fn blink_led(mut led: Output<'static, GpioPin<4>>) {
 
 #[embassy_executor::task]
 async fn run_andon_light(
-    mut device: (impl OutputSpiDevice + 'static),
+    mut device: SpiDev<'static, GpioPin<5>>,
     andon_light: &'static AndonAsyncMutex,
     mut led_reset: Output<'static, GpioPin<20>>,
 ) {

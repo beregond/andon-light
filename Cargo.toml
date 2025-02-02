@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 serde = { version = "1.0.215", default-features = false }
-esp-backtrace = { version = "0.14.0", features = [
+esp-backtrace = { version = "0.15.0", features = [
   "esp32c3",
   "exception-handler",
   "panic-handler",
@@ -18,7 +18,7 @@ esp-hal = { version = "0.20.1", features = [
   "async",
   "embedded-hal",
 ] }
-esp-println = { version = "0.11.0", features = ["esp32c3", "log"] }
+esp-println = { version = "0.13.0", features = ["esp32c3", "log"] }
 log = "0.4.21"
 embedded-io = "0.6.1"
 esp-wifi = { version = "0.8.0", features = [
