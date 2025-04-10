@@ -1,6 +1,7 @@
 #![no_std]
 
 use embassy_time::{Duration, Timer};
+use log;
 
 /// A marker for a color channel. It only speciefies if the channel is enabled in pattern
 /// and is intened to be transformed later into actual color.
@@ -211,15 +212,33 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
         }
     }
 
-    pub fn notify(&mut self, code: T) {
+    pub fn notify(&mut self, code: T) -> bool {
+        log::debug!("Notify: {} - {}", code.as_str(), code.description());
         if let ErrorType::Ok = code.level() {
-            return;
+            return false;
         }
-        self.codes.insert(code).unwrap();
+        if log::log_enabled!(log::Level::Debug) {
+            let code_repr = code.as_str();
+            let inserted = self.codes.insert(code).unwrap();
+            if inserted {
+                log::debug!("Code added {}", code_repr);
+            }
+            inserted
+        } else {
+            self.codes.insert(code).unwrap()
+        }
     }
 
-    pub fn resolve(&mut self, code: T) {
-        self.codes.remove(&code);
+    pub fn resolve(&mut self, code: T) -> bool {
+        if self.codes.contains(&code) {
+            let removed = self.codes.remove(&code);
+            if removed {
+                log::debug!("Resolving: {}", code.as_str());
+            }
+            removed
+        } else {
+            false
+        }
     }
 
     pub fn notify_exclusive<const W: usize>(&mut self, code: T, exclusive: &heapless::Vec<T, W>) {
@@ -227,7 +246,7 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
             if *item == code {
                 continue;
             }
-            self.codes.remove(&item);
+            self.codes.remove(item);
         }
         if let ErrorType::Ok = code.level() {
             return;

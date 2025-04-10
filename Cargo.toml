@@ -21,12 +21,12 @@ esp-hal = { version = "0.20.1", features = [
 esp-println = { version = "0.13.0", features = ["esp32c3", "log"] }
 log = "0.4.25"
 embedded-io = "0.6.1"
-esp-wifi = { version = "0.8.0", features = [
-  "esp32c3",
-  "phy-enable-usb",
-  "utils",
-  "wifi",
-] }
+# esp-wifi = { version = "0.8.0", features = [
+#   "esp32c3",
+#   "phy-enable-usb",
+#   "utils",
+#   "wifi",
+# ] }
 embassy-executor = { version = "0.6.0", features = ["task-arena-size-12288"] }
 embassy-time = "0.3.1"
 heapless = { version = "0.8.0", default-features = false }
