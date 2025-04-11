@@ -9,7 +9,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   rust-checks:
@@ -22,7 +21,7 @@ jobs:
           - command: build
             args: --release
           - command: fmt
-            args: --all -- --check --color always
+            args: --all -- --check
           - command: clippy
             args: --all-features --workspace -- -D warnings
     steps:

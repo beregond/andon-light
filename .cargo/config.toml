@@ -1,9 +1,8 @@
 [target.riscv32imc-unknown-none-elf]
-runner = "espflash flash --partition-table partitions.csv --monitor"
-
+runner = "espflash flash --monitor --chip esp32c3 --partition-table partitions.csv"
 
 [env]
-ESP_LOG = "INFO"
+ESP_LOG = "info"
 
 [build]
 rustflags = [
@@ -16,4 +15,4 @@ rustflags = [
 target = "riscv32imc-unknown-none-elf"
 
 [unstable]
-build-std = ["core"]
+build-std = ["alloc", "core"]
