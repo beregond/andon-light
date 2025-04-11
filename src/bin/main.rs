@@ -20,6 +20,11 @@ use esp_hal::{
     dma::{DmaRxBuf, DmaTxBuf},
     dma_buffers,
     gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull},
+    ledc::{
+        channel::{self, ChannelIFace},
+        timer::{self, TimerIFace},
+        LSGlobalClkSource, Ledc, LowSpeed,
+    },
     spi::{
         master::{Config, Spi, SpiDmaBus},
         Mode,
@@ -86,6 +91,37 @@ async fn run_andon_light(
     }
 }
 
+#[embassy_executor::task]
+async fn heartbeat(
+    mut lstimer: timer::Timer<'static, LowSpeed>,
+    mut channel: channel::Channel<'static, LowSpeed>,
+) {
+    lstimer
+        .configure(timer::config::Config {
+            duty: timer::config::Duty::Duty5Bit,
+            clock_source: timer::LSClockSource::APBClk,
+            frequency: Rate::from_khz(24),
+        })
+        .unwrap();
+
+    channel
+        .configure(channel::config::Config {
+            timer: &lstimer,
+            duty_pct: 10,
+            pin_config: channel::config::PinConfig::PushPull,
+        })
+        .unwrap();
+
+    loop {
+        channel.start_duty_fade(30, 90, 100).unwrap();
+        Timer::after(Duration::from_millis(100)).await;
+        channel.start_duty_fade(90, 10, 100).unwrap();
+        Timer::after(Duration::from_millis(100)).await;
+        channel.start_duty_fade(10, 30, 100).unwrap();
+        Timer::after(Duration::from_millis(800)).await;
+    }
+}
+
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
     // generator version: 0.3.1
@@ -109,6 +145,14 @@ async fn main(spawner: Spawner) {
         peripherals.RADIO_CLK,
     )
     .unwrap();
+
+    // Heartbeat
+    let mut ledc = Ledc::new(peripherals.LEDC);
+    let heartbeat_led = peripherals.GPIO4;
+    ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
+    let lstimer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
+    let channel0 = ledc.channel(channel::Number::Channel0, heartbeat_led);
+    spawner.spawn(heartbeat(lstimer0, channel0)).unwrap();
 
     // Define Spi
     let sclk = Output::new(peripherals.GPIO8, Level::Low, OutputConfig::default());
@@ -154,17 +198,11 @@ async fn main(spawner: Spawner) {
     let led_reset = Output::new(peripherals.GPIO20, Level::High, OutputConfig::default());
 
     static ANDON: StaticCell<AndonAsyncMutex> = StaticCell::new();
+    // TODO: take it from config
     let andon_light = ANDON.init(Mutex::new(AndonLight::new(16, 10, 150)));
     spawner
         .spawn(run_andon_light(spi_dev, andon_light, led_reset))
         .unwrap();
 
     log::debug!("Leds started");
-
-    loop {
-        log::info!("Hello world!");
-        Timer::after(Duration::from_secs(1)).await;
-    }
-
-    // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.0/examples/src/bin
 }
