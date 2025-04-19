@@ -12,10 +12,13 @@ use embassy_sync::{
     mutex::Mutex,
 };
 use embassy_time::{Duration, Timer};
+use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_sdmmc::SdCard;
 use esp_backtrace as _;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{
     clock::CpuClock,
+    delay::Delay,
     dma::{DmaRxBuf, DmaTxBuf},
     dma_buffers,
     gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull},
@@ -67,7 +70,7 @@ type AndonAsyncMutex = Mutex<CriticalSectionRawMutex, AndonLight>;
 pub struct AndonConfig {
     version: u32,
     core_config: CoreConfig,
-    buzzer_enabled: bool,
+    // buzzer_enabled: bool,
 }
 
 impl Default for AndonConfig {
@@ -75,7 +78,7 @@ impl Default for AndonConfig {
         Self {
             version: 1,
             core_config: CoreConfig::default(),
-            buzzer_enabled: true,
+            // buzzer_enabled: true,
         }
     }
 }
@@ -83,16 +86,16 @@ impl Default for AndonConfig {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CoreConfig {
     leds_amount: usize,
-    brightness: u8,
-    speed: u32,
+    // brightness: u8,
+    // speed: u32,
 }
 
 impl Default for CoreConfig {
     fn default() -> Self {
         Self {
             leds_amount: DEFAULT_LED_AMOUNT,
-            brightness: 10,
-            speed: 150,
+            // brightness: 10,
+            // speed: 150,
         }
     }
 }
@@ -284,7 +287,31 @@ async fn main(spawner: Spawner) {
 
     log::debug!("Peripherals initialized");
     log::debug!("Reading config from SD card");
-    // SD card read be here
+
+    let mut buffer = [0u8; CONFIG_BUFFER_SIZE];
+    let sd_select = Output::new(peripherals.GPIO2, Level::High, OutputConfig::default());
+    let sd_reader = SdReader::new(spi_bus, sd_select, Delay::new());
+    // TODO: Need better support for config errors
+    let result = sd_reader
+        .read_config::<AndonConfig>("CONFIG.JSO", &mut buffer)
+        .await;
+
+    let mut leds_amount = DEFAULT_LED_AMOUNT;
+    match result {
+        Ok(maybe_result) => {
+            if let Some(config) = maybe_result {
+                log::debug!("Config read properly from file");
+                leds_amount = config.core_config.leds_amount;
+                log::debug!("Leds amound set to {}", leds_amount);
+            } else {
+                log::debug!("Seems there is no config file, falling back to default");
+            }
+        }
+        Err(_) => {
+            log::error!("Failed to read config file");
+        }
+    }
+
     log::debug!("End of config read");
 
     // Buzzer
@@ -301,8 +328,7 @@ async fn main(spawner: Spawner) {
     let led_reset = Output::new(peripherals.GPIO20, Level::High, OutputConfig::default());
 
     static ANDON: StaticCell<AndonAsyncMutex> = StaticCell::new();
-    // TODO: take it from config
-    let andon_light = ANDON.init(Mutex::new(AndonLight::new(16, 10, 150)));
+    let andon_light = ANDON.init(Mutex::new(AndonLight::new(leds_amount as u8, 10, 150)));
     spawner
         .spawn(run_andon_light(spi_dev, andon_light, led_reset))
         .unwrap();
