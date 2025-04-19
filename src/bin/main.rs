@@ -13,7 +13,6 @@ use embassy_sync::{
 };
 use embassy_time::{Duration, Timer};
 use esp_backtrace as _;
-use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{
     clock::CpuClock,
@@ -32,9 +31,14 @@ use esp_hal::{
     time::Rate,
     Async,
 };
+use esp_hal::{gpio::GpioPin, timer::systimer::SystemTimer};
+use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 
 extern crate alloc;
+
+const CONFIG_BUFFER_SIZE: usize = 4096;
+const DEFAULT_LED_AMOUNT: usize = generate_default_from_env!(DEFAULT_LED_AMOUNT, 16);
 
 type SpiBus = Mutex<NoopRawMutex, SpiDmaBus<'static, Async>>;
 
@@ -58,6 +62,40 @@ pub enum ErrorCodes {
 
 type AndonLight = andon_light_core::AndonLight<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }>;
 type AndonAsyncMutex = Mutex<CriticalSectionRawMutex, AndonLight>;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AndonConfig {
+    version: u32,
+    core_config: CoreConfig,
+    buzzer_enabled: bool,
+}
+
+impl Default for AndonConfig {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            core_config: CoreConfig::default(),
+            buzzer_enabled: true,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CoreConfig {
+    leds_amount: usize,
+    brightness: u8,
+    speed: u32,
+}
+
+impl Default for CoreConfig {
+    fn default() -> Self {
+        Self {
+            leds_amount: DEFAULT_LED_AMOUNT,
+            brightness: 10,
+            speed: 150,
+        }
+    }
+}
 
 #[embassy_executor::task]
 async fn run_andon_light(
@@ -96,6 +134,7 @@ async fn heartbeat(
     mut lstimer: timer::Timer<'static, LowSpeed>,
     mut channel: channel::Channel<'static, LowSpeed>,
 ) {
+    log::debug!("Heartbeat task started");
     lstimer
         .configure(timer::config::Config {
             duty: timer::config::Duty::Duty5Bit,
@@ -122,9 +161,67 @@ async fn heartbeat(
     }
 }
 
+#[embassy_executor::task]
+async fn buzzer(mut buzzer_pin: GpioPin<3>, ledc: Ledc<'static>) {
+    let tones: [(char, u32); 4] = [
+        ('d', 294),
+        ('f', 349),
+        ('a', 440),
+        ('o', 587), // d octave
+    ];
+    let tune = [('d', 1), ('f', 1), ('a', 1), ('o', 1), (' ', 2)];
+    // Obtain a note in the tune
+    for note in tune {
+        // Retrieve the freqeuncy and beat associated with the note
+        for tone in tones {
+            // Find a note match in the tones array and update
+            if tone.0 == note.0 {
+                log::debug!("Note: {}", note.0);
+                let mut lstimer = ledc.timer::<LowSpeed>(timer::Number::Timer1);
+                lstimer
+                    .configure(timer::config::Config {
+                        duty: timer::config::Duty::Duty13Bit,
+                        clock_source: timer::LSClockSource::APBClk,
+                        frequency: Rate::from_hz(tone.1),
+                    })
+                    .unwrap();
+
+                let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
+                channel
+                    .configure(channel::config::Config {
+                        timer: &lstimer,
+                        duty_pct: 10,
+                        pin_config: channel::config::PinConfig::PushPull,
+                    })
+                    .unwrap();
+                Timer::after(Duration::from_millis(100 * note.1)).await;
+            } else if note.0 == ' ' {
+                log::debug!("Empty note");
+                let mut lstimer = ledc.timer::<LowSpeed>(timer::Number::Timer1);
+                lstimer
+                    .configure(timer::config::Config {
+                        duty: timer::config::Duty::Duty13Bit,
+                        clock_source: timer::LSClockSource::APBClk,
+                        frequency: Rate::from_hz(1_u32),
+                    })
+                    .unwrap();
+
+                let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
+                channel
+                    .configure(channel::config::Config {
+                        timer: &lstimer,
+                        duty_pct: 0,
+                        pin_config: channel::config::PinConfig::PushPull,
+                    })
+                    .unwrap();
+                Timer::after(Duration::from_millis(100 * note.1)).await;
+            }
+        }
+    }
+}
+
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
-    // generator version: 0.3.1
     esp_println::logger::init_logger_from_env();
     log::info!("Hello world!");
 
@@ -146,10 +243,12 @@ async fn main(spawner: Spawner) {
     )
     .unwrap();
 
-    // Heartbeat
+    // Configure the LEDC
     let mut ledc = Ledc::new(peripherals.LEDC);
-    let heartbeat_led = peripherals.GPIO4;
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
+
+    // Heartbeat
+    let heartbeat_led = peripherals.GPIO4;
     let lstimer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
     let channel0 = ledc.channel(channel::Number::Channel0, heartbeat_led);
     spawner.spawn(heartbeat(lstimer0, channel0)).unwrap();
@@ -187,6 +286,10 @@ async fn main(spawner: Spawner) {
     log::debug!("Reading config from SD card");
     // SD card read be here
     log::debug!("End of config read");
+
+    // Buzzer
+    let buzzer_pin = peripherals.GPIO3;
+    spawner.spawn(buzzer(buzzer_pin, ledc)).unwrap();
 
     log::debug!("Starting up leds control");
 

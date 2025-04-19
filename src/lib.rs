@@ -2,17 +2,11 @@
 
 use andon_light_core::OutputSpiDevice;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
-use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex};
+use embassy_sync::blocking_mutex::raw::{NoopRawMutex, RawMutex};
+use embassy_sync::mutex::Mutex;
 use embedded_hal_async::spi::SpiDevice as _;
-use esp_hal::{
-    gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull},
-    spi::{
-        master::{Config, Spi, SpiDmaBus},
-        Mode,
-    },
-    time::Rate,
-    Async,
-};
+use embedded_sdmmc::SdCard;
+use esp_hal::{delay::Delay, gpio::Output, spi::master::SpiDmaBus, Async};
 
 pub struct SpiDev<'d> {
     pub device: SpiDevice<'static, NoopRawMutex, SpiDmaBus<'static, Async>, Output<'d>>,
