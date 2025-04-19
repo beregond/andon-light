@@ -12,8 +12,6 @@ use embassy_sync::{
     mutex::Mutex,
 };
 use embassy_time::{Duration, Timer};
-use embedded_hal_bus::spi::ExclusiveDevice;
-use embedded_sdmmc::SdCard;
 use esp_backtrace as _;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{
@@ -296,21 +294,21 @@ async fn main(spawner: Spawner) {
         .read_config::<AndonConfig>("CONFIG.JSO", &mut buffer)
         .await;
 
-    let mut leds_amount = DEFAULT_LED_AMOUNT;
-    match result {
+    let andon_config = match result {
         Ok(maybe_result) => {
             if let Some(config) = maybe_result {
                 log::debug!("Config read properly from file");
-                leds_amount = config.core_config.leds_amount;
-                log::debug!("Leds amound set to {}", leds_amount);
+                config
             } else {
                 log::debug!("Seems there is no config file, falling back to default");
+                AndonConfig::default()
             }
         }
         Err(_) => {
             log::error!("Failed to read config file");
+            AndonConfig::default()
         }
-    }
+    };
 
     log::debug!("End of config read");
 
@@ -328,7 +326,11 @@ async fn main(spawner: Spawner) {
     let led_reset = Output::new(peripherals.GPIO20, Level::High, OutputConfig::default());
 
     static ANDON: StaticCell<AndonAsyncMutex> = StaticCell::new();
-    let andon_light = ANDON.init(Mutex::new(AndonLight::new(leds_amount as u8, 10, 150)));
+    let andon_light = ANDON.init(Mutex::new(AndonLight::new(
+        andon_config.core_config.leds_amount as u8,
+        10,
+        150,
+    )));
     spawner
         .spawn(run_andon_light(spi_dev, andon_light, led_reset))
         .unwrap();
