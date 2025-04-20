@@ -1,7 +1,6 @@
 #![no_std]
 
 use embassy_time::{Duration, Timer};
-use log;
 
 /// A marker for a color channel. It only speciefies if the channel is enabled in pattern
 /// and is intened to be transformed later into actual color.

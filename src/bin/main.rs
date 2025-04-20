@@ -41,6 +41,18 @@ extern crate alloc;
 const CONFIG_BUFFER_SIZE: usize = 4096;
 const DEFAULT_LED_AMOUNT: usize = generate_default_from_env!(DEFAULT_LED_AMOUNT, 16);
 
+const fn _default_leds() -> usize {
+    DEFAULT_LED_AMOUNT
+}
+
+const fn _default_brightness() -> u8 {
+    10
+}
+
+const fn _default_speed() -> u16 {
+    150
+}
+
 type SpiBus = Mutex<NoopRawMutex, SpiDmaBus<'static, Async>>;
 
 #[derive(Debug, Hash, Eq, PartialEq, ErrorCodesEnum)]
@@ -83,18 +95,17 @@ impl Default for AndonConfig {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CoreConfig {
+    #[serde(default = "_default_leds")]
     leds_amount: usize,
-    // brightness: u8,
-    // speed: u32,
+    #[serde(default = "_default_brightness")]
+    brightness: u8,
+    #[serde(default = "_default_speed")]
+    speed: u16,
 }
 
 impl Default for CoreConfig {
     fn default() -> Self {
-        Self {
-            leds_amount: DEFAULT_LED_AMOUNT,
-            // brightness: 10,
-            // speed: 150,
-        }
+        serde_json_core::de::from_slice(b"{}").unwrap().0
     }
 }
 
@@ -304,8 +315,9 @@ async fn main(spawner: Spawner) {
                 AndonConfig::default()
             }
         }
-        Err(_) => {
+        Err(e) => {
             log::error!("Failed to read config file");
+            log::error!("{:?}", e);
             AndonConfig::default()
         }
     };
@@ -328,8 +340,8 @@ async fn main(spawner: Spawner) {
     static ANDON: StaticCell<AndonAsyncMutex> = StaticCell::new();
     let andon_light = ANDON.init(Mutex::new(AndonLight::new(
         andon_config.core_config.leds_amount as u8,
-        10,
-        150,
+        andon_config.core_config.brightness,
+        andon_config.core_config.speed,
     )));
     spawner
         .spawn(run_andon_light(spi_dev, andon_light, led_reset))
