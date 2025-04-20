@@ -53,6 +53,14 @@ const fn _default_speed() -> u16 {
     150
 }
 
+const fn _default_true() -> bool {
+    true
+}
+
+const fn _default_version() -> u32 {
+    1
+}
+
 type SpiBus = Mutex<NoopRawMutex, SpiDmaBus<'static, Async>>;
 
 #[derive(Debug, Hash, Eq, PartialEq, ErrorCodesEnum)]
@@ -78,18 +86,17 @@ type AndonAsyncMutex = Mutex<CriticalSectionRawMutex, AndonLight>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AndonConfig {
+    #[serde(default = "_default_version")]
     version: u32,
+    #[serde(default)]
     core_config: CoreConfig,
-    // buzzer_enabled: bool,
+    #[serde(default = "_default_true")]
+    buzzer_enabled: bool,
 }
 
 impl Default for AndonConfig {
     fn default() -> Self {
-        Self {
-            version: 1,
-            core_config: CoreConfig::default(),
-            // buzzer_enabled: true,
-        }
+        serde_json_core::de::from_slice(b"{}").unwrap().0
     }
 }
 
@@ -325,8 +332,11 @@ async fn main(spawner: Spawner) {
     log::debug!("End of config read");
 
     // Buzzer
-    let buzzer_pin = peripherals.GPIO3;
-    spawner.spawn(buzzer(buzzer_pin, ledc)).unwrap();
+    if andon_config.buzzer_enabled {
+        log::debug!("Buzzer enabled");
+        let buzzer_pin = peripherals.GPIO3;
+        spawner.spawn(buzzer(buzzer_pin, ledc)).unwrap();
+    }
 
     log::debug!("Starting up leds control");
 
