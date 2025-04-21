@@ -41,22 +41,27 @@ extern crate alloc;
 const CONFIG_BUFFER_SIZE: usize = 4096;
 const DEFAULT_LED_AMOUNT: usize = generate_default_from_env!(DEFAULT_LED_AMOUNT, 16);
 
+#[inline]
 const fn _default_leds() -> usize {
     DEFAULT_LED_AMOUNT
 }
 
+#[inline]
 const fn _default_brightness() -> u8 {
     10
 }
 
+#[inline]
 const fn _default_speed() -> u16 {
     150
 }
 
+#[inline]
 const fn _default_true() -> bool {
     true
 }
 
+#[inline]
 const fn _default_version() -> u32 {
     1
 }
@@ -182,58 +187,59 @@ async fn heartbeat(
 
 #[embassy_executor::task]
 async fn buzzer(mut buzzer_pin: GpioPin<3>, ledc: Ledc<'static>) {
-    let tones: [(char, u32); 4] = [
+    let tones = [
         ('d', 294),
         ('f', 349),
         ('a', 440),
-        ('o', 587), // d octave
+        ('o', 587), // d5
     ];
     let tune = [('d', 1), ('f', 1), ('a', 1), ('o', 1), (' ', 2)];
     // Obtain a note in the tune
     for note in tune {
-        // Retrieve the freqeuncy and beat associated with the note
-        for tone in tones {
-            // Find a note match in the tones array and update
-            if tone.0 == note.0 {
-                log::debug!("Note: {}", note.0);
-                let mut lstimer = ledc.timer::<LowSpeed>(timer::Number::Timer1);
-                lstimer
-                    .configure(timer::config::Config {
-                        duty: timer::config::Duty::Duty13Bit,
-                        clock_source: timer::LSClockSource::APBClk,
-                        frequency: Rate::from_hz(tone.1),
-                    })
-                    .unwrap();
+        if note.0 == ' ' {
+            log::debug!("Empty note");
+            let mut lstimer = ledc.timer::<LowSpeed>(timer::Number::Timer2);
+            lstimer
+                .configure(timer::config::Config {
+                    duty: timer::config::Duty::Duty13Bit,
+                    clock_source: timer::LSClockSource::APBClk,
+                    frequency: Rate::from_hz(1_u32),
+                })
+                .unwrap();
 
-                let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
-                channel
-                    .configure(channel::config::Config {
-                        timer: &lstimer,
-                        duty_pct: 10,
-                        pin_config: channel::config::PinConfig::PushPull,
-                    })
-                    .unwrap();
-                Timer::after(Duration::from_millis(100 * note.1)).await;
-            } else if note.0 == ' ' {
-                log::debug!("Empty note");
-                let mut lstimer = ledc.timer::<LowSpeed>(timer::Number::Timer1);
-                lstimer
-                    .configure(timer::config::Config {
-                        duty: timer::config::Duty::Duty13Bit,
-                        clock_source: timer::LSClockSource::APBClk,
-                        frequency: Rate::from_hz(1_u32),
-                    })
-                    .unwrap();
+            let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
+            channel
+                .configure(channel::config::Config {
+                    timer: &lstimer,
+                    duty_pct: 0,
+                    pin_config: channel::config::PinConfig::PushPull,
+                })
+                .unwrap();
+            Timer::after(Duration::from_millis(100 * note.1)).await;
+        } else {
+            for tone in tones {
+                // Find a note match in the tones array and update
+                if tone.0 == note.0 {
+                    log::debug!("Note: {}", note.0);
+                    let mut lstimer = ledc.timer::<LowSpeed>(timer::Number::Timer2);
+                    lstimer
+                        .configure(timer::config::Config {
+                            duty: timer::config::Duty::Duty13Bit,
+                            clock_source: timer::LSClockSource::APBClk,
+                            frequency: Rate::from_hz(tone.1),
+                        })
+                        .unwrap();
 
-                let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
-                channel
-                    .configure(channel::config::Config {
-                        timer: &lstimer,
-                        duty_pct: 0,
-                        pin_config: channel::config::PinConfig::PushPull,
-                    })
-                    .unwrap();
-                Timer::after(Duration::from_millis(100 * note.1)).await;
+                    let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
+                    channel
+                        .configure(channel::config::Config {
+                            timer: &lstimer,
+                            duty_pct: 10,
+                            pin_config: channel::config::PinConfig::PushPull,
+                        })
+                        .unwrap();
+                    Timer::after(Duration::from_millis(100 * note.1)).await;
+                }
             }
         }
     }

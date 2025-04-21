@@ -124,7 +124,7 @@ static PART_SYSTEM_WARN: Pattern = [CYAN, OFF, OFF, OFF];
 
 // Now there comes nine actual patterns, which mostly are combination of parts
 static PATTERN_OK_OK: Pattern = combine_patterns(PART_SYSTEM_OK, PART_DEVICE_OK);
-/// System warn must not show ok for device
+// System warn must not show 'ok state' for device
 static PATTERN_WARN_OK: Pattern = combine_patterns(PART_SYSTEM_WARN, PATTERN_OFF);
 static PATTERN_OK_IDLE: Pattern = combine_patterns(PART_SYSTEM_OK, PART_DEVICE_IDLE);
 static PATTERN_WARN_IDLE: Pattern = combine_patterns(PART_SYSTEM_WARN, PART_DEVICE_IDLE);
@@ -133,7 +133,8 @@ static PATTERN_OK_WARN: Pattern = combine_patterns(PART_SYSTEM_OK, PART_DEVICE_W
 static PATTERN_DEVICE_ERROR: Pattern = [RED, OFF, OFF, RED];
 static PATTERN_SYSTEM_ERROR: Pattern = [OFF, MAGENTA, OFF, OFF];
 
-/// This pattern is the only exceptional one, as it's used for most rare case (hopefully) - when both system and device are in error state
+// This pattern is the only exceptional one, therefore it's used for (hopefully) most rare case
+// - when both system and device are in error state
 static PATTERN_FATAL_ERROR: Pattern = [OFF, MAGENTA, OFF, RED];
 
 pub trait OutputSpiDevice<Word: Copy + 'static = u8> {
@@ -150,11 +151,12 @@ pub enum DeviceState {
 }
 
 pub enum SystemState {
-    Ok,
-    Warn,
-    Error,
+    Ok,    // Everything is ok
+    Warn,  // There is minor problem, that does not prevent the system from working
+    Error, // There is a problem that prevents the system from working
 }
 
+// Combination of system and device states
 #[derive(Debug)]
 pub enum ErrorType {
     Ok,
@@ -163,6 +165,17 @@ pub enum ErrorType {
     DeviceError,
     SystemWarn,
     SystemError,
+}
+
+// How annoying alert you should set up.
+// Since the andon state is mix of many warns and states - you may want to simply
+// know how annoying the alert (like buzzer) should be. Check methot that maps
+// states to that enum to see how it works.
+pub enum AlertLevel {
+    Chill,     // Everything is ok
+    Attentive, // There is something to be aware of, but of low priority
+    Important, // There is important problem, that should be solved
+    Urgent,    // Shit just hit the fan
 }
 
 enum Scaling {
@@ -274,13 +287,8 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
         pattern: Pattern,
         scaling: Scaling,
     ) {
-        // TODO: Implement this better
-        let colors = [
-            pattern[0].as_color(self.brightness),
-            pattern[1].as_color(self.brightness),
-            pattern[2].as_color(self.brightness),
-            pattern[3].as_color(self.brightness),
-        ];
+        // TODO: allow reversed pattern
+        let colors: [Color; 4] = core::array::from_fn(|i| pattern[i].as_color(self.brightness));
         match scaling {
             Scaling::Stretch => {
                 for color in &colors {
@@ -333,6 +341,20 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
             SystemState::Ok
         };
         (system_state, device_state)
+    }
+
+    fn calculate_alert_level(&self) -> AlertLevel {
+        let (system_state, device_state) = self.calculate_state();
+        match (system_state, device_state) {
+            (SystemState::Ok, DeviceState::Ok) => AlertLevel::Chill,
+            (SystemState::Warn, DeviceState::Ok) => AlertLevel::Attentive,
+            (SystemState::Ok, DeviceState::Idle) => AlertLevel::Attentive,
+            (SystemState::Warn, DeviceState::Idle) => AlertLevel::Attentive,
+            (SystemState::Ok, DeviceState::Warn) => AlertLevel::Important,
+            (SystemState::Warn, DeviceState::Warn) => AlertLevel::Important,
+            (SystemState::Error, _) => AlertLevel::Urgent,
+            (_, DeviceState::Error) => AlertLevel::Urgent,
+        }
     }
 
     pub async fn signal(&mut self, device: &mut impl OutputSpiDevice) {
