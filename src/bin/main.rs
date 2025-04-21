@@ -5,13 +5,14 @@ use andon_light::*;
 
 use andon_light_core::ErrorCodesBase;
 use andon_light_macros::{generate_default_from_env, ErrorCodesEnum};
+use core::cmp::Ord;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_sync::{
     blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex},
     mutex::Mutex,
 };
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{
@@ -20,6 +21,7 @@ use esp_hal::{
     dma::{DmaRxBuf, DmaTxBuf},
     dma_buffers,
     gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull},
+    i2c::master::I2c,
     ledc::{
         channel::{self, ChannelIFace},
         timer::{self, TimerIFace},
@@ -35,7 +37,7 @@ use esp_hal::{
 use esp_hal::{gpio::GpioPin, timer::systimer::SystemTimer};
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
-
+use tcs3472::Tcs3472;
 extern crate alloc;
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
@@ -132,7 +134,7 @@ async fn run_andon_light(
     led_reset.set_low();
 
     {
-        log::debug!("Start of test procedure");
+        log::debug!("Start of led test procedure");
         let mut andon_light = andon_light.lock().await;
 
         andon_light.run_test_procedure(&mut device).await;
@@ -141,7 +143,7 @@ async fn run_andon_light(
         log::debug!("End of test procedure");
     }
 
-    log::debug!("Entering regular cycle");
+    log::debug!("Entering regular leds cycle");
     loop {
         let pause: u64;
         {
@@ -187,6 +189,7 @@ async fn heartbeat(
 
 #[embassy_executor::task]
 async fn buzzer(mut buzzer_pin: GpioPin<3>, ledc: Ledc<'static>) {
+    log::debug!("Buzzer enabled");
     let tones = [
         ('d', 294),
         ('f', 349),
@@ -245,6 +248,86 @@ async fn buzzer(mut buzzer_pin: GpioPin<3>, ledc: Ledc<'static>) {
     }
 }
 
+#[embassy_executor::task]
+async fn rgb_probe_task(
+    mut sensor: Tcs3472<I2c<'static, Async>>,
+    andon_light: &'static AndonAsyncMutex,
+) {
+    log::debug!("RGB probe task started");
+    let mut ticker = Ticker::every(Duration::from_millis(500));
+    loop {
+        'main: loop {
+            match (
+                sensor.enable().await,
+                andon_light.lock().await,
+                ErrorCodes::SE001,
+            ) {
+                (Err(_), mut andon_light, code) => {
+                    andon_light.notify(code);
+                    break 'main;
+                }
+                (Ok(_), mut andon_light, code) => {
+                    andon_light.resolve(code);
+                }
+            }
+
+            match (
+                sensor.enable_rgbc().await,
+                andon_light.lock().await,
+                ErrorCodes::SE002,
+            ) {
+                (Err(_), mut andon_light, code) => {
+                    andon_light.notify(code);
+                    break 'main;
+                }
+                (Ok(_), mut andon_light, code) => {
+                    andon_light.resolve(code);
+                }
+            }
+
+            while !sensor.is_rgbc_status_valid().await.unwrap() {
+                // wait for measurement to be available
+                Timer::after(Duration::from_millis(10)).await;
+            }
+
+            let mut exclusive = heapless::Vec::<_, 4>::new();
+            exclusive.push(ErrorCodes::SE003).unwrap();
+            exclusive.push(ErrorCodes::E001).unwrap();
+            exclusive.push(ErrorCodes::I001).unwrap();
+            exclusive.push(ErrorCodes::W001).unwrap();
+
+            'inner: loop {
+                match sensor.read_all_channels().await {
+                    Err(_) => {
+                        let mut andon_light = andon_light.lock().await;
+                        andon_light.notify(ErrorCodes::SE003);
+                        break 'inner;
+                    }
+                    Ok(measurement) => {
+                        let color =
+                            normalize_rgb(measurement.red, measurement.green, measurement.blue);
+                        {
+                            log::info!("Color detected: {}", color);
+                            let mut andon_light = andon_light.lock().await;
+                            andon_light.resolve(ErrorCodes::SE003);
+                            let error_code = match color {
+                                "Green" | "Mint" | "Lime" => ErrorCodes::Ok,
+                                "Blue" | "Violet" | "Azure" => ErrorCodes::I001,
+                                "Red" | "Pink" | "Magenta" => ErrorCodes::E001,
+                                _ => ErrorCodes::W001,
+                            };
+                            andon_light.notify_exclusive(error_code, &exclusive);
+                        }
+                    }
+                }
+                ticker.next().await;
+            }
+            ticker.next().await;
+        }
+        ticker.next().await;
+    }
+}
+
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
@@ -274,9 +357,9 @@ async fn main(spawner: Spawner) {
 
     // Heartbeat
     let heartbeat_led = peripherals.GPIO4;
-    let lstimer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
-    let channel0 = ledc.channel(channel::Number::Channel0, heartbeat_led);
-    spawner.spawn(heartbeat(lstimer0, channel0)).unwrap();
+    // let lstimer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
+    // let channel0 = ledc.channel(channel::Number::Channel0, heartbeat_led);
+    // spawner.spawn(heartbeat(lstimer0, channel0)).unwrap();
 
     // Define Spi
     let sclk = Output::new(peripherals.GPIO8, Level::Low, OutputConfig::default());
@@ -339,9 +422,10 @@ async fn main(spawner: Spawner) {
 
     // Buzzer
     if andon_config.buzzer_enabled {
-        log::debug!("Buzzer enabled");
         let buzzer_pin = peripherals.GPIO3;
-        spawner.spawn(buzzer(buzzer_pin, ledc)).unwrap();
+        // spawner.spawn(buzzer(buzzer_pin, ledc)).unwrap();
+    } else {
+        log::debug!("Buzzer disabled");
     }
 
     log::debug!("Starting up leds control");
@@ -364,4 +448,86 @@ async fn main(spawner: Spawner) {
         .unwrap();
 
     log::debug!("Leds started");
+
+    let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
+        .unwrap()
+        .with_sda(peripherals.GPIO6)
+        .with_scl(peripherals.GPIO7)
+        .into_async();
+    let sensor = Tcs3472::new(i2c);
+    spawner.spawn(rgb_probe_task(sensor, andon_light)).unwrap();
+}
+
+enum ColorLevel {
+    High,
+    Medium,
+    Low,
+}
+
+// Function to determine the basic color based on normalized RGB values
+fn map_to_basic_color(r: u16, g: u16, b: u16) -> &'static str {
+    // Define the basic 12 colors. These are just names for simplicity.
+    log::trace!("RGB values: {} {} {}", r, g, b);
+    match map_three(r, g, b) {
+        (ColorLevel::High, ColorLevel::Low, ColorLevel::High) => "Magenta",
+        (ColorLevel::High, ColorLevel::Low, ColorLevel::Medium) => "Pink",
+        (ColorLevel::High, ColorLevel::Low, ColorLevel::Low) => "Red",
+        (ColorLevel::High, ColorLevel::Medium, ColorLevel::Low) => "Orange",
+        (ColorLevel::High, ColorLevel::High, ColorLevel::Low) => "Yellow",
+        (ColorLevel::Medium, ColorLevel::High, ColorLevel::Low) => "Lime",
+        (ColorLevel::Low, ColorLevel::High, ColorLevel::Low) => "Lime",
+        (ColorLevel::Low, ColorLevel::High, ColorLevel::Medium) => "Mint",
+        (ColorLevel::Low, ColorLevel::High, ColorLevel::High) => "Cyan",
+        (ColorLevel::Low, ColorLevel::Medium, ColorLevel::High) => "Azure",
+        (ColorLevel::Low, ColorLevel::Low, ColorLevel::High) => "Blue",
+        (ColorLevel::Medium, ColorLevel::Low, ColorLevel::High) => "Violet",
+        (_, _, _) => "Gray",
+    }
+}
+
+fn map_three(r: u16, g: u16, b: u16) -> (ColorLevel, ColorLevel, ColorLevel) {
+    if r == 100 {
+        let (g, b) = map_two(g, b);
+        (ColorLevel::High, g, b)
+    } else if g == 100 {
+        let (r, b) = map_two(r, b);
+        (r, ColorLevel::High, b)
+    } else {
+        let (r, g) = map_two(r, g);
+        (r, g, ColorLevel::High)
+    }
+}
+
+#[inline]
+fn map_two(first: u16, second: u16) -> (ColorLevel, ColorLevel) {
+    if first > second {
+        (map_one(first), ColorLevel::Low)
+    } else {
+        (ColorLevel::Low, map_one(second))
+    }
+}
+
+#[inline]
+fn map_one(value: u16) -> ColorLevel {
+    if value > 90 {
+        ColorLevel::High
+    } else if value > 60 {
+        ColorLevel::Medium
+    } else {
+        ColorLevel::Low
+    }
+}
+
+fn normalize_rgb(red: u16, green: u16, blue: u16) -> &'static str {
+    let max = max_of_three(red, green, blue);
+    if max == 0 {
+        return "Black";
+    }
+    let normalize = |val: u16| (val as f32 / max as f32 * 100.0) as u16;
+    let (r, g, b) = (normalize(red), normalize(green), normalize(blue));
+    map_to_basic_color(r, g, b)
+}
+
+fn max_of_three<T: Ord>(a: T, b: T, c: T) -> T {
+    a.max(b).max(c)
 }

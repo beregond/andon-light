@@ -68,6 +68,7 @@ embedded-hal = "1.0.0"
 serde = { version = "1.0.219", default-features = false }
 serde-json-core = { version = "0.6.0", features = ["custom-error-messages"] }
 embedded-hal-bus = "0.3.0"
+tcs3472 = { version = "1.0.0", features = ["async"] }
 
 [profile.dev]
 # Rust debug is too slow.
