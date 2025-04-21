@@ -3,7 +3,7 @@
 
 use andon_light::*;
 
-use andon_light_core::ErrorCodesBase;
+use andon_light_core::{AlertLevel, ErrorCodesBase};
 use andon_light_macros::{generate_default_from_env, ErrorCodesEnum};
 use core::cmp::Ord;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
@@ -188,43 +188,48 @@ async fn heartbeat(
 }
 
 #[embassy_executor::task]
-async fn buzzer(mut buzzer_pin: GpioPin<3>, ledc: Ledc<'static>) {
+async fn buzzer(
+    mut buzzer_pin: GpioPin<3>,
+    ledc: Ledc<'static>,
+    andon_light: &'static AndonAsyncMutex,
+) {
     log::debug!("Buzzer enabled");
     let tones = [
-        ('d', 294),
-        ('f', 349),
-        ('a', 440),
-        ('o', 587), // d5
+        ("c4", 262),
+        ("d4", 294),
+        ("f4", 349),
+        ("a4", 440),
+        ("c5", 523),
+        ("d5", 587),
+        ("c6", 1046),
+        (" ", 1),
     ];
-    let tune = [('d', 1), ('f', 1), ('a', 1), ('o', 1), (' ', 2)];
-    // Obtain a note in the tune
-    for note in tune {
-        if note.0 == ' ' {
-            log::debug!("Empty note");
-            let mut lstimer = ledc.timer::<LowSpeed>(timer::Number::Timer2);
-            lstimer
-                .configure(timer::config::Config {
-                    duty: timer::config::Duty::Duty13Bit,
-                    clock_source: timer::LSClockSource::APBClk,
-                    frequency: Rate::from_hz(1_u32),
-                })
-                .unwrap();
-
-            let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
-            channel
-                .configure(channel::config::Config {
-                    timer: &lstimer,
-                    duty_pct: 0,
-                    pin_config: channel::config::PinConfig::PushPull,
-                })
-                .unwrap();
-            Timer::after(Duration::from_millis(100 * note.1)).await;
-        } else {
+    let mut tune = [("d4", 1), ("f4", 1), ("a4", 1), ("d5", 1), (" ", 2)];
+    let mut first_run = true;
+    let mut last_level = AlertLevel::Chill;
+    loop {
+        // Obtain a note in the tune
+        if !first_run {
+            let andon_light = andon_light.lock().await;
+            let alert_level = andon_light.calculate_alert_level();
+            match alert_level {
+                AlertLevel::Chill => tune = [(" ", 1), (" ", 1), (" ", 1), (" ", 1), (" ", 1)],
+                AlertLevel::Attentive => {
+                    tune = [("c4", 1), (" ", 25), (" ", 25), (" ", 25), (" ", 25)]
+                }
+                AlertLevel::Important => tune = [("c5", 1), (" ", 2), (" ", 2), (" ", 2), (" ", 4)],
+                AlertLevel::Urgent => tune = [("c6", 1), (" ", 1), (" ", 0), (" ", 0), (" ", 0)],
+            }
+            if last_level != alert_level {
+                last_level = alert_level;
+            }
+        }
+        for note in tune {
             for tone in tones {
                 // Find a note match in the tones array and update
                 if tone.0 == note.0 {
                     log::debug!("Note: {}", note.0);
-                    let mut lstimer = ledc.timer::<LowSpeed>(timer::Number::Timer2);
+                    let mut lstimer = ledc.timer::<LowSpeed>(timer::Number::Timer1);
                     lstimer
                         .configure(timer::config::Config {
                             duty: timer::config::Duty::Duty13Bit,
@@ -233,17 +238,24 @@ async fn buzzer(mut buzzer_pin: GpioPin<3>, ledc: Ledc<'static>) {
                         })
                         .unwrap();
 
+                    let duty_pct = match tone.0 {
+                        " " => 0,
+                        _ => 10,
+                    };
                     let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
                     channel
                         .configure(channel::config::Config {
                             timer: &lstimer,
-                            duty_pct: 10,
+                            duty_pct,
                             pin_config: channel::config::PinConfig::PushPull,
                         })
                         .unwrap();
                     Timer::after(Duration::from_millis(100 * note.1)).await;
                 }
             }
+        }
+        if first_run {
+            first_run = false;
         }
     }
 }
@@ -307,7 +319,7 @@ async fn rgb_probe_task(
                         let color =
                             normalize_rgb(measurement.red, measurement.green, measurement.blue);
                         {
-                            log::info!("Color detected: {}", color);
+                            log::trace!("Color detected: {}", color);
                             let mut andon_light = andon_light.lock().await;
                             andon_light.resolve(ErrorCodes::SE003);
                             let error_code = match color {
@@ -357,9 +369,9 @@ async fn main(spawner: Spawner) {
 
     // Heartbeat
     let heartbeat_led = peripherals.GPIO4;
-    // let lstimer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
-    // let channel0 = ledc.channel(channel::Number::Channel0, heartbeat_led);
-    // spawner.spawn(heartbeat(lstimer0, channel0)).unwrap();
+    let lstimer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
+    let channel0 = ledc.channel(channel::Number::Channel0, heartbeat_led);
+    spawner.spawn(heartbeat(lstimer0, channel0)).unwrap();
 
     // Define Spi
     let sclk = Output::new(peripherals.GPIO8, Level::Low, OutputConfig::default());
@@ -419,15 +431,6 @@ async fn main(spawner: Spawner) {
     };
 
     log::debug!("End of config read");
-
-    // Buzzer
-    if andon_config.buzzer_enabled {
-        let buzzer_pin = peripherals.GPIO3;
-        // spawner.spawn(buzzer(buzzer_pin, ledc)).unwrap();
-    } else {
-        log::debug!("Buzzer disabled");
-    }
-
     log::debug!("Starting up leds control");
 
     let leds_select = Output::new(peripherals.GPIO5, Level::Low, OutputConfig::default());
@@ -448,6 +451,16 @@ async fn main(spawner: Spawner) {
         .unwrap();
 
     log::debug!("Leds started");
+
+    // Buzzer
+    if andon_config.buzzer_enabled {
+        let buzzer_pin = peripherals.GPIO3;
+        spawner
+            .spawn(buzzer(buzzer_pin, ledc, andon_light))
+            .unwrap();
+    } else {
+        log::debug!("Buzzer disabled");
+    }
 
     let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
         .unwrap()

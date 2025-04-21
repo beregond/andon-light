@@ -171,6 +171,7 @@ pub enum ErrorType {
 // Since the andon state is mix of many warns and states - you may want to simply
 // know how annoying the alert (like buzzer) should be. Check methot that maps
 // states to that enum to see how it works.
+#[derive(Debug, Eq, PartialEq)]
 pub enum AlertLevel {
     Chill,     // Everything is ok
     Attentive, // There is something to be aware of, but of low priority
@@ -343,7 +344,7 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
         (system_state, device_state)
     }
 
-    fn calculate_alert_level(&self) -> AlertLevel {
+    pub fn calculate_alert_level(&self) -> AlertLevel {
         let (system_state, device_state) = self.calculate_state();
         match (system_state, device_state) {
             (SystemState::Ok, DeviceState::Ok) => AlertLevel::Chill,
