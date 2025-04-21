@@ -14,7 +14,7 @@ pub struct SpiDev<'d> {
     pub device: SpiDevice<'static, NoopRawMutex, SpiDmaBus<'static, Async>, Output<'d>>,
 }
 
-impl<'d> OutputSpiDevice for SpiDev<'d> {
+impl OutputSpiDevice for SpiDev<'_> {
     type Error = core::convert::Infallible;
 
     async fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
