@@ -208,23 +208,11 @@ async fn buzzer(
     let mut first_run = true;
     let mut last_level = AlertLevel::Chill;
     loop {
-        // Obtain a note in the tune
-        if !first_run {
-            let andon_light = andon_light.lock().await;
-            let alert_level = andon_light.calculate_alert_level();
-            match alert_level {
-                AlertLevel::Chill => tune = [(" ", 1), (" ", 1), (" ", 1), (" ", 1), (" ", 1)],
-                AlertLevel::Attentive => {
-                    tune = [("c4", 1), (" ", 25), (" ", 25), (" ", 25), (" ", 25)]
-                }
-                AlertLevel::Important => tune = [("c5", 1), (" ", 2), (" ", 2), (" ", 2), (" ", 4)],
-                AlertLevel::Urgent => tune = [("c6", 1), (" ", 1), (" ", 0), (" ", 0), (" ", 0)],
+        'melody: for note in tune {
+            if note.0 == "-" {
+                continue;
             }
-            if last_level != alert_level {
-                last_level = alert_level;
-            }
-        }
-        for note in tune {
+            // Obtain a note in the tune
             for tone in tones {
                 // Find a note match in the tones array and update
                 if tone.0 == note.0 {
@@ -240,7 +228,7 @@ async fn buzzer(
 
                     let duty_pct = match tone.0 {
                         " " => 0,
-                        _ => 10,
+                        _ => 20,
                     };
                     let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
                     channel
@@ -250,7 +238,31 @@ async fn buzzer(
                             pin_config: channel::config::PinConfig::PushPull,
                         })
                         .unwrap();
-                    Timer::after(Duration::from_millis(100 * note.1)).await;
+                    for _ in 0..note.1 {
+                        Timer::after(Duration::from_millis(100)).await;
+                        if !first_run {
+                            let andon_light = andon_light.lock().await;
+                            let alert_level = andon_light.calculate_alert_level();
+                            match alert_level {
+                                AlertLevel::Chill => {
+                                    tune = [(" ", 1), ("-", 0), ("-", 0), ("-", 0), ("-", 0)]
+                                }
+                                AlertLevel::Attentive => {
+                                    tune = [("c4", 1), (" ", 100), ("-", 0), ("-", 0), ("-", 0)]
+                                }
+                                AlertLevel::Important => {
+                                    tune = [("c5", 1), (" ", 10), ("-", 0), ("-", 0), ("-", 0)]
+                                }
+                                AlertLevel::Urgent => {
+                                    tune = [("c6", 1), (" ", 1), ("-", 0), ("-", 0), ("-", 0)]
+                                }
+                            }
+                            if last_level != alert_level {
+                                last_level = alert_level;
+                                break 'melody;
+                            }
+                        }
+                    }
                 }
             }
         }
