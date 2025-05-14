@@ -184,7 +184,7 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
 // DISCLAIMER: This is a very naive implementation and makes a lot of assumptions!
 // If anything breaks - be sure you check your env vars
 #[proc_macro]
-pub fn generate_default_from_env(input: TokenStream) -> TokenStream {
+pub fn default_from_env(input: TokenStream) -> TokenStream {
     let tokens = input.into_iter().collect::<Vec<_>>();
     match &tokens[..] {
         [TokenTree::Ident(ident), TokenTree::Punct(punct), TokenTree::Literal(literal)] => {

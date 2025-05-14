@@ -4,7 +4,7 @@
 use andon_light::*;
 
 use andon_light_core::{AlertLevel, ErrorCodesBase};
-use andon_light_macros::{generate_default_from_env, ErrorCodesEnum};
+use andon_light_macros::{default_from_env, ErrorCodesEnum};
 use core::cmp::Ord;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
@@ -41,11 +41,12 @@ use tcs3472::Tcs3472;
 extern crate alloc;
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
-const DEFAULT_LED_AMOUNT: usize = generate_default_from_env!(DEFAULT_LED_AMOUNT, 16);
+const DEFAULT_LEDS_AMOUNT: usize = default_from_env!(DEFAULT_LEDS_AMOUNT, 16);
+const MAX_SUPPORTED_LEDS: usize = default_from_env!(MAX_SUPPORTED_LEDS, 16);
 
 #[inline]
 const fn _default_leds() -> usize {
-    DEFAULT_LED_AMOUNT
+    DEFAULT_LEDS_AMOUNT
 }
 
 #[inline]
@@ -88,7 +89,8 @@ pub enum ErrorCodes {
     E001,
 }
 
-type AndonLight = andon_light_core::AndonLight<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }>;
+type AndonLight =
+    andon_light_core::AndonLight<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }, MAX_SUPPORTED_LEDS>;
 type AndonAsyncMutex = Mutex<CriticalSectionRawMutex, AndonLight>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

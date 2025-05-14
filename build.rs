@@ -2,7 +2,7 @@ fn main() {
     linker_be_nice();
     // make sure linkall.x is the last linker script (otherwise might cause problems with flip-link)
     println!("cargo:rustc-link-arg=-Tlinkall.x");
-    println!("cargo:rerun-if-changed=$DEFAULT_LED_AMOUNT");
+    println!("cargo:rerun-if-changed=$DEFAULT_LEDS_AMOUNT");
 }
 
 fn linker_be_nice() {

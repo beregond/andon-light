@@ -208,17 +208,19 @@ pub trait ErrorCodesBase: Sized + core::fmt::Debug + Eq + PartialEq + core::hash
     fn level(&self) -> ErrorType;
 }
 
-pub struct AndonLight<T: ErrorCodesBase, const U: usize> {
+pub struct AndonLight<T: ErrorCodesBase, const U: usize, const W: usize> {
     leds_amount: u8,
     brightness: u8,
     speed: u16,
     codes: heapless::FnvIndexSet<T, U>,
+    buffer: heapless::Vec<[u8; 12], W>,
 }
 
-impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
+impl<T: ErrorCodesBase, const U: usize, const W: usize> AndonLight<T, U, W> {
     pub const fn new(leds_amount: u8, brightness: u8, speed: u16) -> Self {
         Self {
             codes: heapless::FnvIndexSet::<T, U>::new(),
+            buffer: heapless::Vec::new(),
             leds_amount,
             brightness,
             speed,
@@ -254,7 +256,7 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
         }
     }
 
-    pub fn notify_exclusive<const W: usize>(&mut self, code: T, exclusive: &heapless::Vec<T, W>) {
+    pub fn notify_exclusive<const Y: usize>(&mut self, code: T, exclusive: &heapless::Vec<T, Y>) {
         for item in exclusive {
             if *item == code {
                 continue;
@@ -267,7 +269,7 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
         self.codes.insert(code).unwrap();
     }
 
-    pub fn resolve_all<const W: usize>(&mut self, codes: &heapless::Vec<T, W>) {
+    pub fn resolve_all<const Y: usize>(&mut self, codes: &heapless::Vec<T, Y>) {
         for code in codes {
             self.codes.remove(code);
         }
@@ -290,22 +292,30 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
     ) {
         // TODO: allow reversed pattern
         let colors: [Color; 4] = core::array::from_fn(|i| pattern[i].as_color(self.brightness));
+        self.buffer.clear();
         match scaling {
             Scaling::Stretch => {
                 for color in &colors {
                     for _ in 0..self.leds_per_segment() {
-                        self.send_color(device, color).await;
+                        self.buffer.push(translate_color(color)).unwrap();
                     }
                 }
             }
             Scaling::Repeat => {
                 for _ in 0..self.leds_per_segment() {
                     for color in &colors {
-                        self.send_color(device, color).await;
+                        self.buffer.push(translate_color(color)).unwrap();
                     }
                 }
             }
         }
+
+        let mut result: heapless::Vec<u8, { 12 * 16 }> = heapless::Vec::new();
+        for array in &self.buffer {
+            result.extend_from_slice(array).unwrap();
+        }
+        let msg: [u8; 12 * 16] = result.into_array().unwrap();
+        device.write(&msg).await.unwrap();
     }
 
     fn calculate_state(&self) -> (SystemState, DeviceState) {
@@ -385,18 +395,14 @@ impl<T: ErrorCodesBase, const U: usize> AndonLight<T, U> {
             Timer::after(Duration::from_millis(self.speed as u64)).await;
         }
     }
+}
 
-    async fn send_color(&mut self, spi: &mut impl OutputSpiDevice, color: &Color) {
-        // Priming spi as leds eat first byte ¯\_(ツ)_/¯
-        spi.write(&[0b0]).await.unwrap();
-        // ...and displaying actual colors
-        let data = to_bytes(color.g);
-        spi.write(&data).await.unwrap();
-        let data = to_bytes(color.r);
-        spi.write(&data).await.unwrap();
-        let data = to_bytes(color.b);
-        spi.write(&data).await.unwrap();
-    }
+fn translate_color(color: &Color) -> [u8; 12] {
+    let mut frame = [0u8; 12];
+    frame[0..4].copy_from_slice(&to_bytes(color.g));
+    frame[4..8].copy_from_slice(&to_bytes(color.r));
+    frame[8..12].copy_from_slice(&to_bytes(color.b));
+    frame
 }
 
 fn to_bytes(mut data: u8) -> [u8; 4] {
