@@ -175,8 +175,8 @@ pub enum ErrorType {
 pub enum AlertLevel {
     Chill,     // Everything is ok
     Attentive, // There is something to be aware of, but of low priority
-    Important, // There is important problem, that should be solved
-    Urgent,    // Shit just hit the fan
+    Important, // There is important problem, that should be solved ASAP
+    Urgent,    // Shit just hit the fan 💩
 }
 
 enum Scaling {
@@ -208,19 +208,21 @@ pub trait ErrorCodesBase: Sized + core::fmt::Debug + Eq + PartialEq + core::hash
     fn level(&self) -> ErrorType;
 }
 
-pub struct AndonLight<T: ErrorCodesBase, const U: usize, const W: usize> {
+/// Structure that represents Andon light
+///
+/// For BUFFER_SIZE please provide max amount of supported leds multiplied by 12 - in the future it
+/// will be solved by "complex generic constants" in Rust, but for now it is no available yet.
+pub struct AndonLight<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> {
     leds_amount: u8,
     brightness: u8,
     speed: u16,
     codes: heapless::FnvIndexSet<T, U>,
-    buffer: heapless::Vec<[u8; 12], W>,
 }
 
-impl<T: ErrorCodesBase, const U: usize, const W: usize> AndonLight<T, U, W> {
+impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, U, BUFFER_SIZE> {
     pub const fn new(leds_amount: u8, brightness: u8, speed: u16) -> Self {
         Self {
             codes: heapless::FnvIndexSet::<T, U>::new(),
-            buffer: heapless::Vec::new(),
             leds_amount,
             brightness,
             speed,
@@ -292,29 +294,25 @@ impl<T: ErrorCodesBase, const U: usize, const W: usize> AndonLight<T, U, W> {
     ) {
         // TODO: allow reversed pattern
         let colors: [Color; 4] = core::array::from_fn(|i| pattern[i].as_color(self.brightness));
-        self.buffer.clear();
+        let mut buffer = heapless::Vec::<u8, BUFFER_SIZE>::new();
         match scaling {
             Scaling::Stretch => {
                 for color in &colors {
                     for _ in 0..self.leds_per_segment() {
-                        self.buffer.push(translate_color(color)).unwrap();
+                        buffer.extend_from_slice(&translate_color(color)).unwrap();
                     }
                 }
             }
             Scaling::Repeat => {
                 for _ in 0..self.leds_per_segment() {
                     for color in &colors {
-                        self.buffer.push(translate_color(color)).unwrap();
+                        buffer.extend_from_slice(&translate_color(color)).unwrap();
                     }
                 }
             }
         }
 
-        let mut result: heapless::Vec<u8, { 12 * 16 }> = heapless::Vec::new();
-        for array in &self.buffer {
-            result.extend_from_slice(array).unwrap();
-        }
-        let msg: [u8; 12 * 16] = result.into_array().unwrap();
+        let msg: [u8; BUFFER_SIZE] = buffer.into_array().unwrap();
         device.write(&msg).await.unwrap();
     }
 

@@ -42,7 +42,8 @@ extern crate alloc;
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 const DEFAULT_LEDS_AMOUNT: usize = default_from_env!(DEFAULT_LEDS_AMOUNT, 16);
-const MAX_SUPPORTED_LEDS: usize = default_from_env!(MAX_SUPPORTED_LEDS, 16);
+// Magic inside - see AndonLight core docs to understand why '* 12' is here
+const MAX_SUPPORTED_LEDS: usize = default_from_env!(MAX_SUPPORTED_LEDS, 16) * 12;
 
 #[inline]
 const fn _default_leds() -> usize {
