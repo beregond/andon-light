@@ -2,7 +2,6 @@
 #![no_main]
 
 use andon_light::*;
-use andon_light_core::OutputSpiDevice;
 
 use andon_light_core::{AlertLevel, ErrorCodesBase};
 use andon_light_macros::{default_from_env, ErrorCodesEnum};
@@ -14,6 +13,7 @@ use embassy_sync::{
     mutex::Mutex,
 };
 use embassy_time::{Duration, Ticker, Timer};
+use embedded_hal_async::spi::SpiDevice as _;
 use esp_backtrace as _;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{
@@ -129,7 +129,7 @@ impl Default for CoreConfig {
 
 #[embassy_executor::task]
 async fn run_andon_light(
-    mut device: SpiDev<'static>,
+    mut device: SpiDevice<'static, NoopRawMutex, SpiDmaBus<'static, Async>, Output<'static>>,
     andon_light: &'static AndonAsyncMutex,
     mut led_reset: Output<'static>,
 ) {
@@ -473,9 +473,7 @@ async fn main(spawner: Spawner) {
     log::debug!("Starting up leds control");
 
     let leds_select = Output::new(peripherals.GPIO5, Level::Low, OutputConfig::default());
-    let spi_dev = SpiDev {
-        device: SpiDevice::new(spi_bus, leds_select),
-    };
+    let spi_dev = SpiDevice::new(spi_bus, leds_select);
 
     let led_reset = Output::new(peripherals.GPIO20, Level::High, OutputConfig::default());
 

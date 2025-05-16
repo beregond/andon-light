@@ -135,12 +135,6 @@ static PATTERN_SYSTEM_ERROR: Pattern = [OFF, MAGENTA, OFF, OFF];
 // - when both system and device are in error state
 static PATTERN_FATAL_ERROR: Pattern = [OFF, MAGENTA, OFF, RED];
 
-pub trait OutputSpiDevice<Word: Copy + 'static = u8> {
-    type Error: core::fmt::Debug;
-    #[allow(async_fn_in_trait)]
-    async fn write(&mut self, buf: &[Word]) -> Result<(), Self::Error>;
-}
-
 pub enum DeviceState {
     Ok,    // I don't have to do anything, the system is running
     Idle,  // the system is idle, I may have to do something, but I don't have to do it now
