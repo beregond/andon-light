@@ -36,6 +36,7 @@ use esp_hal::{
     Async,
 };
 use esp_hal::{gpio::GpioPin, timer::systimer::SystemTimer};
+use heapless::Vec;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 use tcs3472::Tcs3472;
@@ -73,7 +74,7 @@ const fn _default_version() -> u32 {
 
 type SpiBus = Mutex<NoopRawMutex, SpiDmaBus<'static, Async>>;
 
-#[derive(Debug, Hash, Eq, PartialEq, ErrorCodesEnum)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, ErrorCodesEnum)]
 pub enum ErrorCodes {
     #[code(message = "Ok", level = "ok")]
     Ok,
@@ -216,7 +217,15 @@ async fn buzzer(
         ("c6", 1046),
         (" ", 1),
     ];
-    let mut tune = [("d4", 1), ("f4", 1), ("a4", 1), ("d5", 1), (" ", 2)];
+    type Melody = Vec<(&'static str, usize), 5>;
+    let staurtup_tune: Melody =
+        Vec::from_slice(&[("d4", 1), ("f4", 1), ("a4", 1), ("d5", 1), (" ", 2)]).unwrap();
+    let chill_tune: Melody = Vec::from_slice(&[(" ", 1)]).unwrap();
+    let attentive_tune: Melody = Vec::from_slice(&[("c4", 1), (" ", 100)]).unwrap();
+    let important_tune: Melody = Vec::from_slice(&[("c5", 1), (" ", 10)]).unwrap();
+    let urgent_tune: Melody = Vec::from_slice(&[("c6", 1), (" ", 1)]).unwrap();
+
+    let mut tune = &staurtup_tune;
     let mut first_run = true;
     let mut last_level = AlertLevel::Chill;
     loop {
@@ -227,16 +236,16 @@ async fn buzzer(
                 if last_level != alert_level {
                     match alert_level {
                         AlertLevel::Chill => {
-                            tune = [(" ", 1), ("-", 0), ("-", 0), ("-", 0), ("-", 0)]
+                            tune = &chill_tune;
                         }
                         AlertLevel::Attentive => {
-                            tune = [("c4", 1), (" ", 100), ("-", 0), ("-", 0), ("-", 0)]
+                            tune = &attentive_tune;
                         }
                         AlertLevel::Important => {
-                            tune = [("c5", 1), (" ", 10), ("-", 0), ("-", 0), ("-", 0)]
+                            tune = &important_tune;
                         }
                         AlertLevel::Urgent => {
-                            tune = [("c6", 1), (" ", 1), ("-", 0), ("-", 0), ("-", 0)]
+                            tune = &urgent_tune;
                         }
                     }
                     last_level = alert_level;
@@ -280,19 +289,7 @@ async fn buzzer(
         }
         if first_run {
             first_run = false;
-            let andon_light = andon_light.lock().await;
-            let alert_level = andon_light.calculate_alert_level();
-            match alert_level {
-                AlertLevel::Chill => tune = [(" ", 1), ("-", 0), ("-", 0), ("-", 0), ("-", 0)],
-                AlertLevel::Attentive => {
-                    tune = [("c4", 1), (" ", 100), ("-", 0), ("-", 0), ("-", 0)]
-                }
-                AlertLevel::Important => {
-                    tune = [("c5", 1), (" ", 10), ("-", 0), ("-", 0), ("-", 0)]
-                }
-                AlertLevel::Urgent => tune = [("c6", 1), (" ", 1), ("-", 0), ("-", 0), ("-", 0)],
-            }
-            last_level = alert_level;
+            Timer::after(Duration::from_millis(100)).await;
         }
     }
 }
@@ -339,13 +336,13 @@ async fn rgb_probe_task(
                 Timer::after(Duration::from_millis(10)).await;
             }
 
-            let mut exclusive = heapless::Vec::<_, 4>::new();
-            exclusive.extend([
+            let exclusive = Vec::<ErrorCodes, 4>::from_slice(&[
                 ErrorCodes::SE003,
                 ErrorCodes::E001,
                 ErrorCodes::I001,
                 ErrorCodes::W001,
-            ]);
+            ])
+            .unwrap();
 
             'inner: loop {
                 match sensor.read_all_channels().await {
@@ -420,6 +417,7 @@ async fn main(spawner: Spawner) {
     );
     let mosi = Output::new(peripherals.GPIO10, Level::Low, OutputConfig::default());
 
+    #[allow(clippy::manual_div_ceil)]
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
     let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
     let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();

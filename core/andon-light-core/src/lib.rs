@@ -378,27 +378,19 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
     }
 }
 
+// Shoutout to smart-leds crate from which big part of this code is copied
 fn translate_color(color: &Color) -> [u8; 12] {
-    // TODO: Simplify that
     let mut frame = [0u8; 12];
-    frame[0..4].copy_from_slice(&to_bytes(color.g));
-    frame[4..8].copy_from_slice(&to_bytes(color.r));
-    frame[8..12].copy_from_slice(&to_bytes(color.b));
-    frame
-}
+    let patterns = [0b1000_1000, 0b1000_1110, 0b1110_1000, 0b1110_1110];
 
-fn to_bytes(mut data: u8) -> [u8; 4] {
-    // This function is copied from smart-leds crate.
-    //
-    // Send two bits in one spi byte. High time first, then the low time
-    // The maximum for T0H is 500ns, the minimum for one bit 1063 ns.
-    // These result in the upper and lower spi frequency limits
-    let mut result = [0b0; 4];
-    let patterns = [0b1000_1000, 0b1000_1110, 0b11101000, 0b11101110];
-    for item in result.iter_mut() {
-        let bits = (data & 0b1100_0000) >> 6;
-        *item = patterns[bits as usize];
-        data <<= 2;
+    for (i, component) in [color.g, color.r, color.b].iter().enumerate() {
+        let mut data = *component;
+        for j in 0..4 {
+            let bits = (data & 0b1100_0000) >> 6;
+            frame[i * 4 + j] = patterns[bits as usize];
+            data <<= 2;
+        }
     }
-    result
+
+    frame
 }
