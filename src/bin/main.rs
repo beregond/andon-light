@@ -331,10 +331,12 @@ async fn rgb_probe_task(
             }
 
             let mut exclusive = heapless::Vec::<_, 4>::new();
-            exclusive.push(ErrorCodes::SE003).unwrap();
-            exclusive.push(ErrorCodes::E001).unwrap();
-            exclusive.push(ErrorCodes::I001).unwrap();
-            exclusive.push(ErrorCodes::W001).unwrap();
+            exclusive.extend([
+                ErrorCodes::SE003,
+                ErrorCodes::E001,
+                ErrorCodes::I001,
+                ErrorCodes::W001,
+            ]);
 
             'inner: loop {
                 match sensor.read_all_channels().await {
