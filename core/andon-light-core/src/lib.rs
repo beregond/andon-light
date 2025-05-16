@@ -1,7 +1,5 @@
 #![no_std]
 
-use embassy_time::{Duration, Timer};
-
 /// A marker for a color channel. It only speciefies if the channel is enabled in pattern
 /// and is intened to be transformed later into actual color.
 #[derive(Clone, Copy)]
@@ -286,12 +284,16 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         self.leds_amount / 4
     }
 
-    async fn draw_pattern(
+    pub fn generate_signal(&mut self) -> heapless::Vec<u8, BUFFER_SIZE> {
+        let (system_state, device_state) = self.calculate_state();
+        self.generate_pattern(collapse(&system_state, &device_state), Scaling::Stretch)
+    }
+
+    fn generate_pattern(
         &mut self,
-        device: &mut impl OutputSpiDevice,
         pattern: Pattern,
         scaling: Scaling,
-    ) {
+    ) -> heapless::Vec<u8, BUFFER_SIZE> {
         // TODO: allow reversed pattern
         let colors: [Color; 4] = core::array::from_fn(|i| pattern[i].as_color(self.brightness));
         let mut buffer = heapless::Vec::<u8, BUFFER_SIZE>::new();
@@ -312,8 +314,7 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
             }
         }
 
-        let msg: [u8; BUFFER_SIZE] = buffer.into_array().unwrap();
-        device.write(&msg).await.unwrap();
+        buffer
     }
 
     fn calculate_state(&self) -> (SystemState, DeviceState) {
@@ -366,17 +367,7 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         }
     }
 
-    pub async fn signal(&mut self, device: &mut impl OutputSpiDevice) {
-        let (system_state, device_state) = self.calculate_state();
-        self.draw_pattern(
-            device,
-            collapse(&system_state, &device_state),
-            Scaling::Stretch,
-        )
-        .await;
-    }
-
-    pub async fn run_test_procedure(&mut self, device: &mut impl OutputSpiDevice) {
+    pub fn generate_test_patterns(&mut self) -> [heapless::Vec<u8, BUFFER_SIZE>; 9] {
         let test_procedure = [
             PATTERN_OFF,
             PATTERN_TEST_RED,
@@ -388,14 +379,13 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
             PATTERN_TEST_DIRECTION_3,
             PATTERN_OFF,
         ];
-        for pattern in test_procedure {
-            self.draw_pattern(device, pattern, Scaling::Repeat).await;
-            Timer::after(Duration::from_millis(self.speed as u64)).await;
-        }
+
+        core::array::from_fn(|i| self.generate_pattern(test_procedure[i], Scaling::Repeat))
     }
 }
 
 fn translate_color(color: &Color) -> [u8; 12] {
+    // TODO: Simplify that
     let mut frame = [0u8; 12];
     frame[0..4].copy_from_slice(&to_bytes(color.g));
     frame[4..8].copy_from_slice(&to_bytes(color.r));

@@ -2,6 +2,7 @@
 #![no_main]
 
 use andon_light::*;
+use andon_light_core::OutputSpiDevice;
 
 use andon_light_core::{AlertLevel, ErrorCodesBase};
 use andon_light_macros::{default_from_env, ErrorCodesEnum};
@@ -140,8 +141,11 @@ async fn run_andon_light(
         log::debug!("Start of led test procedure");
         let mut andon_light = andon_light.lock().await;
 
-        andon_light.run_test_procedure(&mut device).await;
-        andon_light.signal(&mut device).await;
+        let test_patterns = andon_light.generate_test_patterns();
+        for pattern in test_patterns {
+            device.write(pattern.as_slice()).await.unwrap();
+            Timer::after(Duration::from_millis(andon_light.get_speed() as u64)).await;
+        }
         Timer::after(Duration::from_millis(andon_light.get_speed() as u64)).await;
         log::debug!("End of test procedure");
     }
@@ -151,7 +155,8 @@ async fn run_andon_light(
         let pause: u64;
         {
             let mut andon_light = andon_light.lock().await;
-            andon_light.signal(&mut device).await;
+            let pattern = andon_light.generate_signal();
+            device.write(pattern.as_slice()).await.unwrap();
             pause = andon_light.get_speed() as u64;
         }
         Timer::after(Duration::from_millis(pause)).await;
