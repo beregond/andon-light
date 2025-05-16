@@ -137,28 +137,32 @@ async fn run_andon_light(
     led_reset.set_high();
     led_reset.set_low();
 
-    {
-        log::debug!("Start of led test procedure");
-        let mut andon_light = andon_light.lock().await;
+    log::debug!("Start of led test procedure");
 
-        let test_patterns = andon_light.generate_test_patterns();
-        for pattern in test_patterns {
-            device.write(pattern.as_slice()).await.unwrap();
-            Timer::after(Duration::from_millis(andon_light.get_speed() as u64)).await;
-        }
-        Timer::after(Duration::from_millis(andon_light.get_speed() as u64)).await;
-        log::debug!("End of test procedure");
+    let test_patterns;
+    let mut pause;
+
+    {
+        let mut andon_light = andon_light.lock().await;
+        test_patterns = andon_light.generate_test_patterns();
+        pause = andon_light.get_speed() as u64;
     }
+    for pattern in test_patterns {
+        device.write(pattern.as_slice()).await.unwrap();
+        Timer::after(Duration::from_millis(pause)).await;
+    }
+    Timer::after(Duration::from_millis(pause)).await;
+    log::debug!("End of test procedure");
 
     log::debug!("Entering regular leds cycle");
     loop {
-        let pause: u64;
+        let pattern;
         {
             let mut andon_light = andon_light.lock().await;
-            let pattern = andon_light.generate_signal();
-            device.write(pattern.as_slice()).await.unwrap();
+            pattern = andon_light.generate_signal();
             pause = andon_light.get_speed() as u64;
         }
+        device.write(pattern.as_slice()).await.unwrap();
         Timer::after(Duration::from_millis(pause)).await;
     }
 }
