@@ -15,14 +15,14 @@ filename="$1"
 command_to_check="esptool.py"
 
 if ! command -v "$command_to_check" &>/dev/null; then
-  echo "$command_to_check is not installed or not in the PATH. Exiting."
+  echo "$command_to_check is not installed or not in \$PATH. Quiting"
   exit 1
 fi
 
 command_to_check="espflash"
 
 if ! command -v "$command_to_check" &>/dev/null; then
-  echo "$command_to_check is not installed or not in the PATH. Exiting."
+  echo "$command_to_check is not installed or not in \$PATH. Quiting"
   exit 1
 fi
 

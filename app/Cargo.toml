@@ -58,8 +58,8 @@ esp-wifi = { version = "0.13.0", features = [
 ] }
 heapless = { version = "0.8.0", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
-andon-light-core = { path = "./core/andon-light-core/" }
-andon-light-macros = { path = "./core/andon-light-macros/" }
+andon-light-core = { path = "../core/andon-light-core/" }
+andon-light-macros = { path = "../core/andon-light-macros/" }
 embassy-sync = { version = "0.6.2", features = ["log"] }
 embassy-embedded-hal = "0.3.0"
 embedded-hal-async = "1.0.0"
