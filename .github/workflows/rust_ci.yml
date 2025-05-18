@@ -39,5 +39,9 @@ jobs:
         run: cd app && cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
       - name: Check core crates
         run: cd core && cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
+  run-tests:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
       - name: Test core crates
         run: cd core && cargo test
