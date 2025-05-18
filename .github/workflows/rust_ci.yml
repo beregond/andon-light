@@ -35,5 +35,9 @@ jobs:
           components: rust-src, rustfmt, clippy
       - name: Enable caching
         uses: Swatinem/rust-cache@v2
-      - name: Run command
-        run: cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
+      - name: Check main app
+        run: cd app && cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
+      - name: Check core crates
+        run: cd core && cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
+      - name: Test core crates
+        run: cd core && cargo test
