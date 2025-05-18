@@ -1,5 +1,7 @@
 #![no_std]
 
+pub mod colors;
+
 /// A marker for a color channel. It only speciefies if the channel is enabled in pattern
 /// and is intened to be transformed later into actual color.
 #[derive(Clone, Copy)]
@@ -30,8 +32,9 @@ impl Marker {
 
 /// Color is full RGB representation; it can be created out of Marker
 /// and is used when ouptput device is smart led
+// TODO: rename it to something more appropriate
 #[derive(Debug, Clone, Copy)]
-pub struct Color {
+struct Color {
     /// Red
     pub r: u8,
     /// Green
