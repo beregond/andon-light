@@ -57,6 +57,7 @@ impl Default for ColorMapper {
     }
 }
 
+// TODO: document this
 fn normalize_rgb(red: u16, green: u16, blue: u16, saturation_level: u16, margin: u16) -> Color {
     let max = red.max(blue).max(green);
     if max == 0 {
@@ -70,16 +71,22 @@ fn normalize_rgb(red: u16, green: u16, blue: u16, saturation_level: u16, margin:
         map_to_level(b, margin),
     ) {
         (ColorLevel::High, ColorLevel::Low, ColorLevel::High) => Color::Magenta,
+        (ColorLevel::High, ColorLevel::Medium, ColorLevel::High) => Color::Magenta,
         (ColorLevel::High, ColorLevel::Low, ColorLevel::Medium) => Color::Pink,
         (ColorLevel::High, ColorLevel::Low, ColorLevel::Low) => Color::Red,
+        (ColorLevel::High, ColorLevel::Medium, ColorLevel::Medium) => Color::Red,
         (ColorLevel::High, ColorLevel::Medium, ColorLevel::Low) => Color::Orange,
         (ColorLevel::High, ColorLevel::High, ColorLevel::Low) => Color::Yellow,
+        (ColorLevel::High, ColorLevel::High, ColorLevel::Medium) => Color::Yellow,
         (ColorLevel::Medium, ColorLevel::High, ColorLevel::Low) => Color::Lime,
         (ColorLevel::Low, ColorLevel::High, ColorLevel::Low) => Color::Green,
+        (ColorLevel::Medium, ColorLevel::High, ColorLevel::Medium) => Color::Green,
         (ColorLevel::Low, ColorLevel::High, ColorLevel::Medium) => Color::Mint,
         (ColorLevel::Low, ColorLevel::High, ColorLevel::High) => Color::Cyan,
+        (ColorLevel::Medium, ColorLevel::High, ColorLevel::High) => Color::Cyan,
         (ColorLevel::Low, ColorLevel::Medium, ColorLevel::High) => Color::Azure,
         (ColorLevel::Low, ColorLevel::Low, ColorLevel::High) => Color::Blue,
+        (ColorLevel::Medium, ColorLevel::Medium, ColorLevel::High) => Color::Blue,
         (ColorLevel::Medium, ColorLevel::Low, ColorLevel::High) => Color::Violet,
         (ColorLevel::High, ColorLevel::High, ColorLevel::High) => {
             // Special case when summation of all colors is not too high
