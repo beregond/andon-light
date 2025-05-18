@@ -4,7 +4,7 @@
 use andon_light::*;
 
 use andon_light_core::{
-    colors::{translate_color_proportionally, Color},
+    colors::{Color, ColorMapper},
     AlertLevel, ErrorCodesBase,
 };
 use andon_light_macros::{default_from_env, ErrorCodesEnum};
@@ -307,6 +307,7 @@ async fn rgb_probe_task(
 ) {
     log::debug!("RGB probe task started");
     let mut ticker = Ticker::every(Duration::from_millis(500));
+    let mapper = ColorMapper::default();
     loop {
         'main: loop {
             match (
@@ -360,12 +361,10 @@ async fn rgb_probe_task(
                         break 'inner;
                     }
                     Ok(measurement) => {
-                        let color = translate_color_proportionally(
+                        let color = mapper.translate_proportionally(
                             measurement.red,
                             measurement.green,
                             measurement.blue,
-                            100,
-                            1000,
                         );
                         {
                             log::trace!("Color detected: {:?}", color);

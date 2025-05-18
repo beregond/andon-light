@@ -6,6 +6,7 @@ version = "0.1.0"
 [[bin]]
 name = "andon-light"
 path = "./src/bin/main.rs"
+test = false
 
 [dependencies]
 embassy-net = { version = "0.6.0", features = [
