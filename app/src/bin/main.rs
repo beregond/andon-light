@@ -3,9 +3,11 @@
 
 use andon_light::*;
 
-use andon_light_core::{AlertLevel, ErrorCodesBase};
+use andon_light_core::{
+    colors::{translate_color_proportionally, Color},
+    AlertLevel, ErrorCodesBase,
+};
 use andon_light_macros::{default_from_env, ErrorCodesEnum};
-use core::cmp::Ord;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_sync::{
@@ -90,6 +92,10 @@ pub enum ErrorCodes {
     SE003,
     #[code(message = "Device report error", level = "error")]
     E001,
+    #[code(message = "No data from device", level = "error")]
+    E002,
+    #[code(message = "Device data too ambigous", level = "error")]
+    E003,
 }
 
 type AndonLight =
@@ -336,9 +342,11 @@ async fn rgb_probe_task(
                 Timer::after(Duration::from_millis(10)).await;
             }
 
-            let exclusive = Vec::<ErrorCodes, 4>::from_slice(&[
+            let exclusive = Vec::<ErrorCodes, 6>::from_slice(&[
                 ErrorCodes::SE003,
                 ErrorCodes::E001,
+                ErrorCodes::E002,
+                ErrorCodes::E003,
                 ErrorCodes::I001,
                 ErrorCodes::W001,
             ])
@@ -352,17 +360,26 @@ async fn rgb_probe_task(
                         break 'inner;
                     }
                     Ok(measurement) => {
-                        let color =
-                            normalize_rgb(measurement.red, measurement.green, measurement.blue);
+                        let color = translate_color_proportionally(
+                            measurement.red,
+                            measurement.green,
+                            measurement.blue,
+                            100,
+                            1000,
+                        );
                         {
-                            log::trace!("Color detected: {}", color);
+                            log::trace!("Color detected: {:?}", color);
                             let mut andon_light = andon_light.lock().await;
                             andon_light.resolve(ErrorCodes::SE003);
                             let error_code = match color {
-                                "Green" | "Mint" | "Lime" => ErrorCodes::Ok,
-                                "Blue" | "Violet" | "Azure" => ErrorCodes::I001,
-                                "Red" | "Pink" | "Magenta" => ErrorCodes::E001,
-                                _ => ErrorCodes::W001,
+                                Color::Green | Color::Mint | Color::Lime => ErrorCodes::Ok,
+                                Color::Blue | Color::Violet | Color::Azure | Color::Cyan => {
+                                    ErrorCodes::I001
+                                }
+                                Color::Yellow | Color::Orange => ErrorCodes::W001,
+                                Color::Red | Color::Pink | Color::Magenta => ErrorCodes::E001,
+                                Color::Black => ErrorCodes::E002,
+                                Color::Gray | Color::White => ErrorCodes::E003,
                             };
                             andon_light.notify_exclusive(error_code, &exclusive);
                         }
@@ -504,78 +521,4 @@ async fn main(spawner: Spawner) {
         .into_async();
     let sensor = Tcs3472::new(i2c);
     spawner.spawn(rgb_probe_task(sensor, andon_light)).unwrap();
-}
-
-enum ColorLevel {
-    High,
-    Medium,
-    Low,
-}
-
-// Function to determine the basic color based on normalized RGB values
-fn map_to_basic_color(r: u16, g: u16, b: u16) -> &'static str {
-    // Define the basic 12 colors. These are just names for simplicity.
-    log::trace!("RGB values: {} {} {}", r, g, b);
-    match map_three(r, g, b) {
-        (ColorLevel::High, ColorLevel::Low, ColorLevel::High) => "Magenta",
-        (ColorLevel::High, ColorLevel::Low, ColorLevel::Medium) => "Pink",
-        (ColorLevel::High, ColorLevel::Low, ColorLevel::Low) => "Red",
-        (ColorLevel::High, ColorLevel::Medium, ColorLevel::Low) => "Orange",
-        (ColorLevel::High, ColorLevel::High, ColorLevel::Low) => "Yellow",
-        (ColorLevel::Medium, ColorLevel::High, ColorLevel::Low) => "Lime",
-        (ColorLevel::Low, ColorLevel::High, ColorLevel::Low) => "Lime",
-        (ColorLevel::Low, ColorLevel::High, ColorLevel::Medium) => "Mint",
-        (ColorLevel::Low, ColorLevel::High, ColorLevel::High) => "Cyan",
-        (ColorLevel::Low, ColorLevel::Medium, ColorLevel::High) => "Azure",
-        (ColorLevel::Low, ColorLevel::Low, ColorLevel::High) => "Blue",
-        (ColorLevel::Medium, ColorLevel::Low, ColorLevel::High) => "Violet",
-        (_, _, _) => "Gray",
-    }
-}
-
-fn map_three(r: u16, g: u16, b: u16) -> (ColorLevel, ColorLevel, ColorLevel) {
-    if r == 100 {
-        let (g, b) = map_two(g, b);
-        (ColorLevel::High, g, b)
-    } else if g == 100 {
-        let (r, b) = map_two(r, b);
-        (r, ColorLevel::High, b)
-    } else {
-        let (r, g) = map_two(r, g);
-        (r, g, ColorLevel::High)
-    }
-}
-
-#[inline]
-fn map_two(first: u16, second: u16) -> (ColorLevel, ColorLevel) {
-    if first > second {
-        (map_one(first), ColorLevel::Low)
-    } else {
-        (ColorLevel::Low, map_one(second))
-    }
-}
-
-#[inline]
-fn map_one(value: u16) -> ColorLevel {
-    if value > 90 {
-        ColorLevel::High
-    } else if value > 60 {
-        ColorLevel::Medium
-    } else {
-        ColorLevel::Low
-    }
-}
-
-fn normalize_rgb(red: u16, green: u16, blue: u16) -> &'static str {
-    let max = max_of_three(red, green, blue);
-    if max == 0 {
-        return "Black";
-    }
-    let normalize = |val: u16| (val as f32 / max as f32 * 100.0) as u16;
-    let (r, g, b) = (normalize(red), normalize(green), normalize(blue));
-    map_to_basic_color(r, g, b)
-}
-
-fn max_of_three<T: Ord>(a: T, b: T, c: T) -> T {
-    a.max(b).max(c)
 }
