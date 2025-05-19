@@ -27,38 +27,45 @@ enum ColorLevel {
 pub struct ColorMapper {
     activation_level: u16,
     saturation_level: u16,
-    // TODO: name it percentage and limit to 40
-    margin: u16,
+    margin_percent_points: u16,
 }
 
 impl ColorMapper {
-    pub fn new(activation_level: u16, saturation_level: u16, margin: u16) -> Self {
+    pub fn new(activation_level: u16, saturation_level: u16, margin_percent_points: u16) -> Self {
         Self {
             activation_level,
             saturation_level,
-            margin,
+            margin_percent_points,
         }
     }
     pub fn translate_proportionally(&self, red: u16, green: u16, blue: u16) -> Color {
         if red + green + blue <= self.activation_level {
             return Color::Black;
         }
-        normalize_rgb(red, green, blue, self.saturation_level, self.margin)
+        normalize_rgb(
+            red,
+            green,
+            blue,
+            self.saturation_level,
+            self.margin_percent_points,
+        )
     }
 }
 
 impl Default for ColorMapper {
     fn default() -> Self {
-        Self {
-            activation_level: 100,
-            saturation_level: 1000,
-            margin: 10,
-        }
+        Self::new(100, 1000, 10)
     }
 }
 
 // TODO: document this
-fn normalize_rgb(red: u16, green: u16, blue: u16, saturation_level: u16, margin: u16) -> Color {
+fn normalize_rgb(
+    red: u16,
+    green: u16,
+    blue: u16,
+    saturation_level: u16,
+    margin_percent_points: u16,
+) -> Color {
     let max = red.max(blue).max(green);
     if max == 0 {
         return Color::Black;
@@ -66,9 +73,9 @@ fn normalize_rgb(red: u16, green: u16, blue: u16, saturation_level: u16, margin:
     let normalize = |val: u16| (val as f32 / max as f32 * 100.0) as u16;
     let (r, g, b) = (normalize(red), normalize(green), normalize(blue));
     match (
-        map_to_level(r, margin),
-        map_to_level(g, margin),
-        map_to_level(b, margin),
+        map_to_level(r, margin_percent_points),
+        map_to_level(g, margin_percent_points),
+        map_to_level(b, margin_percent_points),
     ) {
         (ColorLevel::High, ColorLevel::Low, ColorLevel::High) => Color::Magenta,
         (ColorLevel::High, ColorLevel::Medium, ColorLevel::High) => Color::Magenta,
@@ -107,9 +114,9 @@ fn normalize_rgb(red: u16, green: u16, blue: u16, saturation_level: u16, margin:
 
 #[inline]
 fn map_to_level(value: u16, margin: u16) -> ColorLevel {
-    if value > 100 - margin {
+    if value >= 100 - margin.min(100) {
         ColorLevel::High
-    } else if value > 60 - margin {
+    } else if value >= 60 - margin.min(60) {
         ColorLevel::Medium
     } else {
         ColorLevel::Low

@@ -206,6 +206,7 @@ async fn heartbeat(
     }
 }
 
+// TODO: Make buzzer task more efficient
 #[embassy_executor::task]
 async fn buzzer(
     mut buzzer_pin: GpioPin<3>,
@@ -289,6 +290,13 @@ async fn buzzer(
                         .unwrap();
                     for _ in 0..note.1 {
                         Timer::after(Duration::from_millis(100)).await;
+                        {
+                            let andon_light = andon_light.lock().await;
+                            let alert_level = andon_light.calculate_alert_level();
+                            if last_level != alert_level {
+                                break 'melody;
+                            }
+                        }
                     }
                 }
             }
