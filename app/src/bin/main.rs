@@ -378,15 +378,18 @@ async fn rgb_probe_task(
                             log::trace!("Color detected: {:?}", color);
                             let mut andon_light = andon_light.lock().await;
                             andon_light.resolve(ErrorCodes::SE003);
+                            // This color schema is made for Prusa MK4 - in future I hope there
+                            // will be more schemas available, but for now this is hardcoded
                             let error_code = match color {
-                                Color::Green | Color::Mint | Color::Lime => ErrorCodes::Ok,
-                                Color::Blue | Color::Violet | Color::Azure | Color::Cyan => {
+                                Color::Green | Color::Mint | Color::Lime | Color::Black => {
                                     ErrorCodes::I001
+                                } // Idle
+                                Color::Blue | Color::Violet | Color::Azure | Color::Cyan => {
+                                    ErrorCodes::Ok // Working
                                 }
-                                Color::Yellow | Color::Orange => ErrorCodes::W001,
-                                Color::Red | Color::Pink | Color::Magenta => ErrorCodes::E001,
-                                Color::Black => ErrorCodes::E002,
-                                Color::Gray | Color::White => ErrorCodes::E003,
+                                Color::Yellow | Color::Orange => ErrorCodes::W001, // Warining
+                                Color::Red | Color::Pink | Color::Magenta => ErrorCodes::E001, // Critical error
+                                Color::Gray | Color::White => ErrorCodes::E003, // Ambigous data
                             };
                             andon_light.notify_exclusive(error_code, &exclusive);
                         }
