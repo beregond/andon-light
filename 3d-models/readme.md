@@ -10,7 +10,7 @@ Print it vertically with 5mm brim. Supports are required, but avoid putting them
 
 - [3mf](01-tower/tower.3mf)
 - [stl](01-tower/tower.stl)
-- [ready project](01-tower/tower.pdusa-slicer-project.3mf)
+- [ready project](01-tower/tower.prusa-slicer-project.3mf)
 
 Preview
 
@@ -39,7 +39,7 @@ Print this part upside down, so you don't need supports.
 
 - [3mf](03-hood/hood.3mf)
 - [stl](03-hood/hood.stl)
-- [ready project](03-hood/hood.pdusa-slicer-project.3mf)
+- [ready project](03-hood/hood.prusa-slicer-project.3mf)
 
 Preview
 
@@ -51,7 +51,7 @@ Top cap for the tower. Print it with supports.
 
 - [3mf](04-cap/cap.3mf)
 - [stl](04-cap/cap.stl)
-- [ready project](04-cap/cap.pdusa-slicer-project.3mf)
+- [ready project](04-cap/cap.prusa-slicer-project.3mf)
 
 Preview
 
@@ -63,7 +63,7 @@ Preview
 
 - [3mf](05-shell/shell.3mf)
 - [stl](05-shell/shell.stl)
-- [ready project](05-shell/shell.pdusa-slicer-project.3mf)
+- [ready project](05-shell/shell.prusa-slicer-project.3mf)
 
 Prewiew
 
@@ -73,7 +73,7 @@ Prewiew
 
 - [3mf](06-bottom-cap/bottom-cap.3mf)
 - [stl](06-bottom-cap/bottom-cap.stl)
-- [ready project](06-bottom-cap/bottom-cap.pdusa-slicer-project.3mf)
+- [ready project](06-bottom-cap/bottom-cap.prusa-slicer-project.3mf)
 
 Preview
 
@@ -95,7 +95,7 @@ If you want to create your own holder - print "half" and "jam" - but create your
 - Half with hold (print upside down)
   - [3mf](07-doughnut/half-with-hold.3mf)
   - [stl](07-doughnut/half-with-hold.stl)
-  - [ready project](07-doughnut/half-with-hold.pdusa-slicer-project.3mf)
+  - [ready project](07-doughnut/half-with-hold.prusa-slicer-project.3mf)
 
 "Half"" preview
 
