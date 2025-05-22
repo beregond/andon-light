@@ -17,7 +17,10 @@ Check `devbin` dir to see available helpful commands
 - 3x stripe of 16 smart leds (WS2812B) - with densito of 96 leds per meter
 - SD card module (WH125 spi sd reader module)
 - SD card
-- USB-C cable (with angle plug - because of lack of space)
+- USB-C cables:
+  - one with angle plug for programming - because of lack of space
+  - second one with straight plug for power supply
+- USB charger
 - 3x 2k Ohm resistors
 - 2x PNP transistors (S8550)
 - buzzer with generator - THT 12mm
@@ -25,13 +28,17 @@ Check `devbin` dir to see available helpful commands
 - USB-C THT socket - like USB4085-GF-A from GCT
 - TCS3472 sensor (the one used in the project is from Adafruit)
 - four pin socket and connector
+- some 0.5mm^2 wire - it should be quite thin to make your life easier; you can harvest some from ethernet cable
 
-You will also need few 3D printed parts, as well as:
+You will also need few 3D printed parts, to print them follow [this guide](3d-models/readme.md).
+
+Other parts:
 
 - transparent plexiglass tube:
   - 20 mm outer diameter
   - 1 mm thickness
   - 18 mm inner diameter
   - 165 mm length
-- USB-C charger
 - toothpick
+
+To mount device first without soldering - also breadboard plus jumper wires are needed.
