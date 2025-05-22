@@ -83,8 +83,8 @@ Preview
 
 Holder consist of three parts - "half" (of doughnut), "jam" and "half with hold" - you need to print all of them. No supports needed, just remember to print "half with hold" upside down.
 
-[!TIP]
-If you want to create your own holder - print "half" and "jam" - but create your own "half with hold" part. You can use "half" as a base and add your own design on top of it.
+> [!TIP]
+> If you want to create your own holder - print "half" and "jam" - but create your own "half with hold" part. You can use "half" as a base and add your own design on top of it.
 
 - Half
   - [3mf](07-doughnut/half.3mf)
@@ -97,7 +97,7 @@ If you want to create your own holder - print "half" and "jam" - but create your
   - [stl](07-doughnut/half-with-hold.stl)
   - [ready project](07-doughnut/half-with-hold.prusa-slicer-project.3mf)
 
-"Half"" preview
+"Half" preview
 
 ![Half print preview](07-doughnut/half-preview.png)
 
@@ -105,6 +105,6 @@ If you want to create your own holder - print "half" and "jam" - but create your
 
 ![Jam print preview](07-doughnut/jam-preview.png)
 
-"half with hold" preview
+"Half with hold" preview
 
 ![Half with hold print preview](07-doughnut/half-with-hold-preview.png)
