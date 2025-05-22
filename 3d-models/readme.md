@@ -8,23 +8,23 @@ Below you can see extra settings for each part. Sometimes there will be Prusa Sl
 
 Print it vertically with 5mm brim. Supports are required, but avoid putting them everywhere (see picture below) to make your life easier.
 
-- [3mf](01 tower/tower.3mf)
-- [stl](01 tower/tower.stl)
-- [ready project](01 tower/tower.pdusa-slicer-project.3mf)
+- [3mf](01-tower/tower.3mf)
+- [stl](01-tower/tower.stl)
+- [ready project](01-tower/tower.pdusa-slicer-project.3mf)
 
 ### Preview
 
-![Tower print preview](01 tower/preview.png)
+![Tower print preview](01-tower/preview.png)
 
 ### Where to avoid supports
 
 You don't want to put supports between PCB holds and in the middle of the tower - only have them for flat overhangs outside and inside the tower.
 
-![Block supports](01 tower/block-supports.png)
+![Block supports](01-tower/block-supports.png)
 
 ## 02 Plug
 
 Just print it on flat side. No supports or brim are needed.
 
-- [3mf](02 plug/plug.3mf)
-- [stl](02 plug/plug.stl)
+- [3mf](02-plug/plug.3mf)
+- [stl](02-plug/plug.stl)
