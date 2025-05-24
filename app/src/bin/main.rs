@@ -278,7 +278,7 @@ async fn buzzer(
 
                     let duty_pct = match tone.0 {
                         " " => 0,
-                        _ => 20,
+                        _ => 5,
                     };
                     let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
                     channel
@@ -290,7 +290,7 @@ async fn buzzer(
                         .unwrap();
                     for _ in 0..note.1 {
                         Timer::after(Duration::from_millis(100)).await;
-                        {
+                        if !first_run {
                             let andon_light = andon_light.lock().await;
                             let alert_level = andon_light.calculate_alert_level();
                             if last_level != alert_level {
