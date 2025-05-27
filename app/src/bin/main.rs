@@ -38,6 +38,7 @@ use esp_hal::{
     Async,
 };
 use esp_hal::{gpio::GpioPin, timer::systimer::SystemTimer};
+use esp_wifi::wifi;
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
@@ -419,12 +420,24 @@ async fn main(spawner: Spawner) {
     log::info!("Embassy initialized!");
 
     let timer1 = TimerGroup::new(peripherals.TIMG0);
-    let _init = esp_wifi::init(
+
+    // Initialization of wifi - for now it is only stub to test that its working, so with with next
+    // software update it will be able to actually connect to wifi and do something useful
+    let wifi_ctrl = esp_wifi::init(
         timer1.timer0,
         esp_hal::rng::Rng::new(peripherals.RNG),
         peripherals.RADIO_CLK,
     )
     .unwrap();
+
+    let (mut controller, _interfaces) = esp_wifi::wifi::new(&wifi_ctrl, peripherals.WIFI).unwrap();
+
+    controller.set_mode(wifi::WifiMode::Sta).unwrap();
+    controller.start().unwrap();
+    let aps: (Vec<wifi::AccessPointInfo, 20>, usize) = controller.scan_n().unwrap();
+    for ap in aps.0 {
+        log::info!("Found AP: {:?}", ap);
+    }
 
     // Configure the LEDC
     let mut ledc = Ledc::new(peripherals.LEDC);
