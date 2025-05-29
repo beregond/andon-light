@@ -241,10 +241,12 @@ async fn buzzer(
             if !first_run {
                 let andon_light = andon_light.lock().await;
                 let alert_level = andon_light.calculate_alert_level();
-                let recalc = match &last_level {
-                    Some(level) if *level == alert_level => false,
-                    _ => true,
-                };
+                let recalc;
+                if let Some(level) = &last_level {
+                    recalc = *level != alert_level;
+                } else {
+                    recalc = true;
+                }
                 if recalc {
                     match alert_level {
                         AlertLevel::Chill => {

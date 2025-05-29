@@ -2,7 +2,7 @@
 
 Signal state with andon light!
 
-!> [!NOTE]
+> [!NOTE]
 > Currently only configuration for TCS3472 sensor and Prusa mk4 is available. More configurations will be (hopefully) added in the future.
 
 ## Parts list
