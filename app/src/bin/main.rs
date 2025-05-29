@@ -235,13 +235,17 @@ async fn buzzer(
 
     let mut tune = &staurtup_tune;
     let mut first_run = true;
-    let mut last_level = AlertLevel::Chill;
+    let mut last_level: Option<AlertLevel> = None;
     loop {
         'melody: for note in tune {
             if !first_run {
                 let andon_light = andon_light.lock().await;
                 let alert_level = andon_light.calculate_alert_level();
-                if last_level != alert_level {
+                let recalc = match &last_level {
+                    Some(level) if *level == alert_level => false,
+                    _ => true,
+                };
+                if recalc {
                     match alert_level {
                         AlertLevel::Chill => {
                             tune = &chill_tune;
@@ -256,7 +260,7 @@ async fn buzzer(
                             tune = &urgent_tune;
                         }
                     }
-                    last_level = alert_level;
+                    last_level = Some(alert_level);
                     break 'melody;
                 }
             }
@@ -292,11 +296,15 @@ async fn buzzer(
                     for _ in 0..note.1 {
                         Timer::after(Duration::from_millis(100)).await;
                         if !first_run {
+                            // TODO: Checking for alert level in the same "thread" as buzzer task
+                            // may block (or disort) playing melody - need to find a way to divide
+                            // it.
                             let andon_light = andon_light.lock().await;
                             let alert_level = andon_light.calculate_alert_level();
-                            if last_level != alert_level {
-                                break 'melody;
-                            }
+                            match &last_level {
+                                Some(level) if *level != alert_level => break 'melody,
+                                _ => {}
+                            };
                         }
                     }
                 }
