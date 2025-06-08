@@ -61,11 +61,6 @@ const fn _default_brightness() -> u8 {
 }
 
 #[inline]
-const fn _default_speed() -> u16 {
-    150
-}
-
-#[inline]
 const fn _default_true() -> bool {
     true
 }
@@ -104,32 +99,23 @@ type AndonLight =
 type AndonAsyncMutex = Mutex<CriticalSectionRawMutex, AndonLight>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct AndonConfig {
-    #[serde(default = "_default_version")]
+pub struct VersionProbe {
     version: u32,
-    #[serde(default)]
-    core_config: CoreConfig,
-    #[serde(default = "_default_true")]
-    buzzer_enabled: bool,
-}
-
-impl Default for AndonConfig {
-    fn default() -> Self {
-        serde_json_core::de::from_slice(b"{}").unwrap().0
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CoreConfig {
+pub struct AndonConfig {
+    #[serde(default = "_default_version")]
+    version: u32,
+    #[serde(default = "_default_true")]
+    buzzer_enabled: bool,
     #[serde(default = "_default_leds")]
     leds_amount: usize,
     #[serde(default = "_default_brightness")]
     brightness: u8,
-    #[serde(default = "_default_speed")]
-    speed: u16,
 }
 
-impl Default for CoreConfig {
+impl Default for AndonConfig {
     fn default() -> Self {
         serde_json_core::de::from_slice(b"{}").unwrap().0
     }
@@ -148,12 +134,11 @@ async fn run_andon_light(
     log::debug!("Start of led test procedure");
 
     let test_patterns;
-    let mut pause;
+    let pause: u64 = 150;
 
     {
         let mut andon_light = andon_light.lock().await;
         test_patterns = andon_light.generate_test_patterns();
-        pause = andon_light.get_speed() as u64;
     }
     for pattern in test_patterns {
         device.write(pattern.as_slice()).await.unwrap();
@@ -168,7 +153,6 @@ async fn run_andon_light(
         {
             let mut andon_light = andon_light.lock().await;
             pattern = andon_light.generate_signal();
-            pause = andon_light.get_speed() as u64;
         }
         device.write(pattern.as_slice()).await.unwrap();
         Timer::after(Duration::from_millis(pause)).await;
@@ -496,23 +480,39 @@ async fn main(spawner: Spawner) {
     let sd_select = Output::new(peripherals.GPIO2, Level::High, OutputConfig::default());
     let sd_reader = SdReader::new(spi_bus, sd_select, Delay::new());
     // TODO: Need better support for config errors
-    let result = sd_reader
-        .read_config::<AndonConfig>("CONFIG.JSO", &mut buffer)
-        .await;
+    // let result = sd_reader
+    //     .read_config::<AndonConfig>("CONFIG.JSO", &mut buffer)
+    //     .await;
+
+    let result = sd_reader.read_config("CONFIG.JSO", &mut buffer).await;
 
     let andon_config = match result {
-        Ok(maybe_result) => {
-            if let Some(config) = maybe_result {
-                log::debug!("Config read properly from file");
-                config
-            } else {
-                log::debug!("Seems there is no config file, falling back to default");
-                AndonConfig::default()
+        Ok(num_read) => {
+            // For now only checking version, but in future it may be used to check compatibility
+            match serde_json_core::de::from_slice::<VersionProbe>(&buffer[0..num_read]) {
+                Ok((result, _)) => {
+                    log::info!("Version read properly from file: {}", result.version);
+                }
+                _ => {
+                    log::info!("Seems there is no version in config file, falling back to default");
+                }
+            }
+
+            match serde_json_core::de::from_slice::<AndonConfig>(&buffer[0..num_read]) {
+                Ok((result, _)) => {
+                    log::debug!("Config read properly from file");
+                    result
+                }
+                Err(e) => {
+                    log::warn!("Seems there is no config file, falling back to default");
+                    log::warn!("{:?}", e);
+                    AndonConfig::default()
+                }
             }
         }
         Err(e) => {
-            log::error!("Failed to read config file");
-            log::error!("{:?}", e);
+            log::warn!("Failed to read config file");
+            log::warn!("{:?}", e);
             AndonConfig::default()
         }
     };
@@ -527,9 +527,8 @@ async fn main(spawner: Spawner) {
 
     static ANDON: StaticCell<AndonAsyncMutex> = StaticCell::new();
     let andon_light = ANDON.init(Mutex::new(AndonLight::new(
-        andon_config.core_config.leds_amount as u8,
-        andon_config.core_config.brightness,
-        andon_config.core_config.speed,
+        andon_config.leds_amount as u8,
+        andon_config.brightness,
     )));
     spawner
         .spawn(run_andon_light(spi_dev, andon_light, led_reset))

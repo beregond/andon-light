@@ -210,17 +210,15 @@ pub trait ErrorCodesBase: Sized + core::fmt::Debug + Eq + PartialEq + core::hash
 pub struct AndonLight<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> {
     leds_amount: u8,
     brightness: u8,
-    speed: u16,
     codes: heapless::FnvIndexSet<T, U>,
 }
 
 impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, U, BUFFER_SIZE> {
-    pub const fn new(leds_amount: u8, brightness: u8, speed: u16) -> Self {
+    pub const fn new(leds_amount: u8, brightness: u8) -> Self {
         Self {
             codes: heapless::FnvIndexSet::<T, U>::new(),
             leds_amount,
             brightness,
-            speed,
         }
     }
 
@@ -270,10 +268,6 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         for code in codes {
             self.codes.remove(code);
         }
-    }
-
-    pub fn get_speed(&self) -> u16 {
-        self.speed
     }
 
     #[inline]

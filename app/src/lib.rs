@@ -1,6 +1,7 @@
 #![no_std]
 
 use core::ops::DerefMut;
+use core::usize;
 use embassy_sync::blocking_mutex::raw::RawMutex;
 use embassy_sync::mutex::Mutex;
 use embedded_hal_bus::spi::ExclusiveDevice;
@@ -41,14 +42,7 @@ impl<'a, M: RawMutex, BUS: embedded_hal::spi::SpiBus> SdReader<'a, M, BUS> {
         Self { bus, cs, delay }
     }
 
-    pub async fn read_config<'de, T>(
-        self,
-        filename: &str,
-        buffer: &'de mut [u8],
-    ) -> Result<Option<T>, ()>
-    where
-        T: Default + serde::Deserialize<'de>,
-    {
+    pub async fn read_config(self, filename: &str, buffer: &mut [u8]) -> Result<usize, ()> {
         let mut guard = self.bus.lock().await;
         let mut bus = guard.deref_mut();
         let sd_spi_device = ExclusiveDevice::new(&mut bus, self.cs, self.delay).unwrap();
@@ -61,16 +55,8 @@ impl<'a, M: RawMutex, BUS: embedded_hal::spi::SpiBus> SdReader<'a, M, BUS> {
                 .open_file_in_dir(filename, embedded_sdmmc::Mode::ReadOnly)
                 .unwrap();
             let num_read = my_file.read(buffer).unwrap();
-            match serde_json_core::de::from_slice::<T>(&buffer[0..num_read]) {
-                Ok((result, _)) => {
-                    return Ok(Some(result));
-                }
-                Err(e) => {
-                    log::error!("{:?}", e);
-                    return Err(());
-                }
-            }
+            return Ok(num_read);
         };
-        Ok(None)
+        Err(())
     }
 }
