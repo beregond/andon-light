@@ -1,7 +1,6 @@
 #![no_std]
 
 use core::ops::DerefMut;
-use core::usize;
 use embassy_sync::blocking_mutex::raw::RawMutex;
 use embassy_sync::mutex::Mutex;
 use embedded_hal_bus::spi::ExclusiveDevice;
