@@ -2,7 +2,7 @@
 
 Signal state with andon light!
 
-> ![!WARNING]
+> [!WARNING]
 > This project is still in early development stage, so it may not work as expected.
 
 ## How does it work?
