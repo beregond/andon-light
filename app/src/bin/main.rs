@@ -105,6 +105,7 @@ pub struct VersionProbe {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AndonConfig {
+    // Maybe use string for version in future?
     #[serde(default = "_default_version")]
     version: u32,
     #[serde(default = "_default_true")]
@@ -382,7 +383,7 @@ async fn rgb_probe_task(
                                 Color::Blue | Color::Violet | Color::Azure | Color::Cyan => {
                                     ErrorCodes::Ok // Working
                                 }
-                                Color::Yellow | Color::Orange => ErrorCodes::W001, // Warining
+                                Color::Yellow | Color::Orange => ErrorCodes::W001, // Warning
                                 Color::Red | Color::Pink | Color::Magenta => ErrorCodes::E001, // Critical error
                                 Color::Gray | Color::White => ErrorCodes::E003, // Ambigous data
                             };
@@ -480,10 +481,6 @@ async fn main(spawner: Spawner) {
     let sd_select = Output::new(peripherals.GPIO2, Level::High, OutputConfig::default());
     let sd_reader = SdReader::new(spi_bus, sd_select, Delay::new());
     // TODO: Need better support for config errors
-    // let result = sd_reader
-    //     .read_config::<AndonConfig>("CONFIG.JSO", &mut buffer)
-    //     .await;
-
     let result = sd_reader.read_config("CONFIG.JSO", &mut buffer).await;
 
     let andon_config = match result {

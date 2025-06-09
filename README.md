@@ -2,6 +2,9 @@
 
 Signal state with andon light!
 
+> ![!WARNING]
+> This project is still in early development stage, so it may not work as expected.
+
 ## How does it work?
 
 Andon light is a tool for monitoring external device and signaling its state using lights and sounds.
@@ -26,6 +29,19 @@ The algorithm works like this:
   - If no such pattern exists, choose the one that matches either of the states
 - Choose sound that matches alert level
 
+## Default config
+
+Store this in `andon.jso`. Currently there is no support for long file names (aka VFAT).
+
+``` json
+{
+    "version": 0,
+    "buzzer_enabled": true,
+    "leds_amount": 16,
+    "brightness": 10,
+}
+```
+
 ## Parts list
 
 - To see the list of parts needed to build this project, check [this file](docs/parts.md).
@@ -33,4 +49,4 @@ The algorithm works like this:
 
 ## Development
 
-Check `devbin` dir to see available helpful commands
+List `devbin` dir to see available helpful commands

@@ -215,6 +215,9 @@ pub struct AndonLight<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usiz
 
 impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, U, BUFFER_SIZE> {
     pub const fn new(leds_amount: u8, brightness: u8) -> Self {
+        if leds_amount <= 1 || leds_amount % 4 != 0 {
+            panic!("Leds amount must be greater than 1 and divisible by 4");
+        }
         Self {
             codes: heapless::FnvIndexSet::<T, U>::new(),
             leds_amount,
