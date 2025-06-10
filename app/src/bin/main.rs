@@ -121,6 +121,12 @@ impl Default for DeviceConfig {
     }
 }
 
+impl DeviceConfig {
+    pub fn generate_andon_config(&self) -> andon_light_core::Config {
+        andon_light_core::Config::new(self.leds_amount as u8, self.brightness)
+    }
+}
+
 struct Device {
     config: DeviceConfig,
     andon_light: AndonLight,
@@ -128,8 +134,7 @@ struct Device {
 
 impl Device {
     pub fn new(device_config: DeviceConfig) -> Self {
-        let andon_light =
-            AndonLight::new(device_config.leds_amount as u8, device_config.brightness);
+        let andon_light = AndonLight::new(device_config.generate_andon_config());
         Self {
             config: device_config,
             andon_light,

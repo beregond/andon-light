@@ -203,25 +203,40 @@ pub trait ErrorCodesBase: Sized + core::fmt::Debug + Eq + PartialEq + core::hash
     fn level(&self) -> ErrorType;
 }
 
+pub struct Config {
+    /// Amount of LEDs in Andon light
+    pub(crate) leds_amount: u8,
+    /// Brightness of the LEDs, 0-255
+    pub(crate) brightness: u8,
+}
+
+impl Config {
+    pub fn new(leds_amount: u8, brightness: u8) -> Self {
+        if leds_amount <= 1 || leds_amount % 4 != 0 {
+            panic!("Leds amount must be greater than 1 and divisible by 4");
+        }
+        // We don't check brightness, as no point if u8 will exceed 255 - it won't.
+        Self {
+            leds_amount,
+            brightness,
+        }
+    }
+}
+
 /// Structure that represents Andon light
 ///
 /// For BUFFER_SIZE please provide max amount of supported leds multiplied by 12 - in the future it
 /// will be solved by "complex generic constants" in Rust, but for now it is no available yet.
 pub struct AndonLight<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> {
-    leds_amount: u8,
-    brightness: u8,
+    config: Config,
     codes: heapless::FnvIndexSet<T, U>,
 }
 
 impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, U, BUFFER_SIZE> {
-    pub const fn new(leds_amount: u8, brightness: u8) -> Self {
-        if leds_amount <= 1 || leds_amount % 4 != 0 {
-            panic!("Leds amount must be greater than 1 and divisible by 4");
-        }
+    pub const fn new(config: Config) -> Self {
         Self {
             codes: heapless::FnvIndexSet::<T, U>::new(),
-            leds_amount,
-            brightness,
+            config,
         }
     }
 
@@ -275,7 +290,7 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
 
     #[inline]
     fn leds_per_segment(&self) -> u8 {
-        self.leds_amount / 4
+        self.config.leds_amount / 4
     }
 
     pub fn generate_signal(&mut self) -> heapless::Vec<u8, BUFFER_SIZE> {
@@ -289,7 +304,8 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         scaling: Scaling,
     ) -> heapless::Vec<u8, BUFFER_SIZE> {
         // TODO: allow reversed pattern
-        let colors: [Color; 4] = core::array::from_fn(|i| pattern[i].as_color(self.brightness));
+        let colors: [Color; 4] =
+            core::array::from_fn(|i| pattern[i].as_color(self.config.brightness));
         let mut buffer = heapless::Vec::<u8, BUFFER_SIZE>::new();
         match scaling {
             Scaling::Stretch => {
