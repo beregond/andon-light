@@ -47,7 +47,7 @@ extern crate alloc;
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 const DEFAULT_LEDS_AMOUNT: usize = default_from_env!(DEFAULT_LEDS_AMOUNT, 16);
-// Magic inside - see AndonLight core docs to understand why '* 12' is here
+// Magic inside - see andon_light_core docs to understand why '* 12' is here
 const MAX_SUPPORTED_LEDS: usize = default_from_env!(MAX_SUPPORTED_LEDS, 16) * 12;
 
 #[inline]
@@ -96,7 +96,6 @@ pub enum ErrorCodes {
 
 type AndonLight =
     andon_light_core::AndonLight<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }, MAX_SUPPORTED_LEDS>;
-type AndonAsyncMutex = Mutex<CriticalSectionRawMutex, AndonLight>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VersionProbe {
@@ -104,7 +103,7 @@ pub struct VersionProbe {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct AndonConfig {
+struct DeviceConfig {
     // Maybe use string for version in future?
     #[serde(default = "_default_version")]
     version: u32,
@@ -116,16 +115,34 @@ pub struct AndonConfig {
     brightness: u8,
 }
 
-impl Default for AndonConfig {
+impl Default for DeviceConfig {
     fn default() -> Self {
         serde_json_core::de::from_slice(b"{}").unwrap().0
     }
 }
 
+struct Device {
+    config: DeviceConfig,
+    andon_light: AndonLight,
+}
+
+impl Device {
+    pub fn new(device_config: DeviceConfig) -> Self {
+        let andon_light =
+            AndonLight::new(device_config.leds_amount as u8, device_config.brightness);
+        Self {
+            config: device_config,
+            andon_light,
+        }
+    }
+}
+
+type DeviceAsyncMutex = Mutex<CriticalSectionRawMutex, Device>;
+
 #[embassy_executor::task]
 async fn run_andon_light(
-    mut device: SpiDevice<'static, NoopRawMutex, SpiDmaBus<'static, Async>, Output<'static>>,
-    andon_light: &'static AndonAsyncMutex,
+    mut spi: SpiDevice<'static, NoopRawMutex, SpiDmaBus<'static, Async>, Output<'static>>,
+    device: &'static DeviceAsyncMutex,
     mut led_reset: Output<'static>,
 ) {
     log::debug!("Resetting leds");
@@ -138,11 +155,11 @@ async fn run_andon_light(
     let pause: u64 = 150;
 
     {
-        let mut andon_light = andon_light.lock().await;
-        test_patterns = andon_light.generate_test_patterns();
+        let mut device = device.lock().await;
+        test_patterns = device.andon_light.generate_test_patterns();
     }
     for pattern in test_patterns {
-        device.write(pattern.as_slice()).await.unwrap();
+        spi.write(pattern.as_slice()).await.unwrap();
         Timer::after(Duration::from_millis(pause)).await;
     }
     Timer::after(Duration::from_millis(pause)).await;
@@ -152,10 +169,10 @@ async fn run_andon_light(
     loop {
         let pattern;
         {
-            let mut andon_light = andon_light.lock().await;
-            pattern = andon_light.generate_signal();
+            let mut device = device.lock().await;
+            pattern = device.andon_light.generate_signal();
         }
-        device.write(pattern.as_slice()).await.unwrap();
+        spi.write(pattern.as_slice()).await.unwrap();
         Timer::after(Duration::from_millis(pause)).await;
     }
 }
@@ -197,7 +214,7 @@ async fn heartbeat(
 async fn buzzer(
     mut buzzer_pin: GpioPin<3>,
     ledc: Ledc<'static>,
-    andon_light: &'static AndonAsyncMutex,
+    device: &'static DeviceAsyncMutex,
 ) {
     log::debug!("Buzzer enabled");
     let tones = [
@@ -224,8 +241,8 @@ async fn buzzer(
     loop {
         'melody: for note in tune {
             if !first_run {
-                let andon_light = andon_light.lock().await;
-                let alert_level = andon_light.calculate_alert_level();
+                let device = device.lock().await;
+                let alert_level = device.andon_light.calculate_alert_level();
                 let recalc;
                 if let Some(level) = &last_level {
                     recalc = *level != alert_level;
@@ -286,8 +303,8 @@ async fn buzzer(
                             // TODO: Checking for alert level in the same "thread" as buzzer task
                             // may block (or disort) playing melody - need to find a way to divide
                             // it.
-                            let andon_light = andon_light.lock().await;
-                            let alert_level = andon_light.calculate_alert_level();
+                            let device = device.lock().await;
+                            let alert_level = device.andon_light.calculate_alert_level();
                             match &last_level {
                                 Some(level) if *level != alert_level => break 'melody,
                                 _ => {}
@@ -307,7 +324,7 @@ async fn buzzer(
 #[embassy_executor::task]
 async fn rgb_probe_task(
     mut sensor: Tcs3472<I2c<'static, Async>>,
-    andon_light: &'static AndonAsyncMutex,
+    device: &'static DeviceAsyncMutex,
 ) {
     log::debug!("RGB probe task started");
     let mut ticker = Ticker::every(Duration::from_millis(500));
@@ -316,29 +333,29 @@ async fn rgb_probe_task(
         'main: loop {
             match (
                 sensor.enable().await,
-                andon_light.lock().await,
+                device.lock().await,
                 ErrorCodes::SE001,
             ) {
-                (Err(_), mut andon_light, code) => {
-                    andon_light.notify(code);
+                (Err(_), mut device, code) => {
+                    device.andon_light.notify(code);
                     break 'main;
                 }
-                (Ok(_), mut andon_light, code) => {
-                    andon_light.resolve(code);
+                (Ok(_), mut device, code) => {
+                    device.andon_light.resolve(code);
                 }
             }
 
             match (
                 sensor.enable_rgbc().await,
-                andon_light.lock().await,
+                device.lock().await,
                 ErrorCodes::SE002,
             ) {
-                (Err(_), mut andon_light, code) => {
-                    andon_light.notify(code);
+                (Err(_), mut device, code) => {
+                    device.andon_light.notify(code);
                     break 'main;
                 }
-                (Ok(_), mut andon_light, code) => {
-                    andon_light.resolve(code);
+                (Ok(_), mut device, code) => {
+                    device.andon_light.resolve(code);
                 }
             }
 
@@ -360,8 +377,8 @@ async fn rgb_probe_task(
             'inner: loop {
                 match sensor.read_all_channels().await {
                     Err(_) => {
-                        let mut andon_light = andon_light.lock().await;
-                        andon_light.notify(ErrorCodes::SE003);
+                        let mut device = device.lock().await;
+                        device.andon_light.notify(ErrorCodes::SE003);
                         break 'inner;
                     }
                     Ok(measurement) => {
@@ -372,8 +389,8 @@ async fn rgb_probe_task(
                         );
                         {
                             log::trace!("Color detected: {:?}", color);
-                            let mut andon_light = andon_light.lock().await;
-                            andon_light.resolve(ErrorCodes::SE003);
+                            let mut device = device.lock().await;
+                            device.andon_light.resolve(ErrorCodes::SE003);
                             // This color schema is made for Prusa MK4 - in future I hope there
                             // will be more schemas available, but for now this is hardcoded
                             let error_code = match color {
@@ -387,7 +404,7 @@ async fn rgb_probe_task(
                                 Color::Red | Color::Pink | Color::Magenta => ErrorCodes::E001, // Critical error
                                 Color::Gray | Color::White => ErrorCodes::E003, // Ambigous data
                             };
-                            andon_light.notify_exclusive(error_code, &exclusive);
+                            device.andon_light.notify_exclusive(error_code, &exclusive);
                         }
                     }
                 }
@@ -483,7 +500,7 @@ async fn main(spawner: Spawner) {
     // TODO: Need better support for config errors
     let result = sd_reader.read_config("CONFIG.JSO", &mut buffer).await;
 
-    let andon_config = match result {
+    let app_config = match result {
         Ok(num_read) => {
             // For now only checking version, but in future it may be used to check compatibility
             match serde_json_core::de::from_slice::<VersionProbe>(&buffer[0..num_read]) {
@@ -495,7 +512,7 @@ async fn main(spawner: Spawner) {
                 }
             }
 
-            match serde_json_core::de::from_slice::<AndonConfig>(&buffer[0..num_read]) {
+            match serde_json_core::de::from_slice::<DeviceConfig>(&buffer[0..num_read]) {
                 Ok((result, _)) => {
                     log::debug!("Config read properly from file");
                     result
@@ -503,14 +520,14 @@ async fn main(spawner: Spawner) {
                 Err(e) => {
                     log::warn!("Seems there is no config file, falling back to default");
                     log::warn!("{:?}", e);
-                    AndonConfig::default()
+                    DeviceConfig::default()
                 }
             }
         }
         Err(e) => {
             log::warn!("Failed to read config file");
             log::warn!("{:?}", e);
-            AndonConfig::default()
+            DeviceConfig::default()
         }
     };
 
@@ -522,23 +539,23 @@ async fn main(spawner: Spawner) {
 
     let led_reset = Output::new(peripherals.GPIO20, Level::High, OutputConfig::default());
 
-    static ANDON: StaticCell<AndonAsyncMutex> = StaticCell::new();
-    let andon_light = ANDON.init(Mutex::new(AndonLight::new(
-        andon_config.leds_amount as u8,
-        andon_config.brightness,
-    )));
+    static ANDON: StaticCell<DeviceAsyncMutex> = StaticCell::new();
+
+    let device = ANDON.init(Mutex::new(Device::new(app_config)));
     spawner
-        .spawn(run_andon_light(spi_dev, andon_light, led_reset))
+        .spawn(run_andon_light(spi_dev, device, led_reset))
         .unwrap();
 
     log::debug!("Leds started");
 
+    let buzzer_enabled;
+    {
+        buzzer_enabled = device.lock().await.config.buzzer_enabled;
+    }
     // Buzzer
-    if andon_config.buzzer_enabled {
+    if buzzer_enabled {
         let buzzer_pin = peripherals.GPIO3;
-        spawner
-            .spawn(buzzer(buzzer_pin, ledc, andon_light))
-            .unwrap();
+        spawner.spawn(buzzer(buzzer_pin, ledc, device)).unwrap();
     } else {
         log::debug!("Buzzer disabled");
     }
@@ -549,5 +566,5 @@ async fn main(spawner: Spawner) {
         .with_scl(peripherals.GPIO7)
         .into_async();
     let sensor = Tcs3472::new(i2c);
-    spawner.spawn(rgb_probe_task(sensor, andon_light)).unwrap();
+    spawner.spawn(rgb_probe_task(sensor, device)).unwrap();
 }
