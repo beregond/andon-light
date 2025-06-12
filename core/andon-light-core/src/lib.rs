@@ -230,13 +230,15 @@ impl Config {
 pub struct AndonLight<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> {
     config: Config,
     codes: heapless::FnvIndexSet<T, U>,
+    state: (SystemState, DeviceState),
 }
 
 impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, U, BUFFER_SIZE> {
     pub const fn new(config: Config) -> Self {
         Self {
-            codes: heapless::FnvIndexSet::<T, U>::new(),
             config,
+            codes: heapless::FnvIndexSet::<T, U>::new(),
+            state: (SystemState::Ok, DeviceState::Ok),
         }
     }
 
@@ -245,28 +247,36 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         if let ErrorType::Ok = code.level() {
             return false;
         }
-        if log::log_enabled!(log::Level::Debug) {
-            let code_repr = code.as_str();
-            let inserted = self.codes.insert(code).unwrap();
-            if inserted {
-                log::debug!("Code added {}", code_repr);
+        let result = {
+            if log::log_enabled!(log::Level::Debug) {
+                let code_repr = code.as_str();
+                let inserted = self.codes.insert(code).unwrap();
+                if inserted {
+                    log::debug!("Code added {}", code_repr);
+                }
+                inserted
+            } else {
+                self.codes.insert(code).unwrap()
             }
-            inserted
-        } else {
-            self.codes.insert(code).unwrap()
-        }
+        };
+        self.recalculate_state();
+        result
     }
 
     pub fn resolve(&mut self, code: T) -> bool {
-        if self.codes.contains(&code) {
-            let removed = self.codes.remove(&code);
-            if removed {
-                log::debug!("Resolving: {}", code.as_str());
+        let result = {
+            if self.codes.contains(&code) {
+                let removed = self.codes.remove(&code);
+                if removed {
+                    log::debug!("Resolving: {}", code.as_str());
+                }
+                removed
+            } else {
+                false
             }
-            removed
-        } else {
-            false
-        }
+        };
+        self.recalculate_state();
+        result
     }
 
     pub fn notify_exclusive<const Y: usize>(&mut self, code: T, exclusive: &heapless::Vec<T, Y>) {
@@ -280,12 +290,14 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
             return;
         }
         self.codes.insert(code).unwrap();
+        self.recalculate_state();
     }
 
     pub fn resolve_all<const Y: usize>(&mut self, codes: &heapless::Vec<T, Y>) {
         for code in codes {
             self.codes.remove(code);
         }
+        self.recalculate_state();
     }
 
     #[inline]
@@ -294,8 +306,8 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
     }
 
     pub fn generate_signal(&mut self) -> heapless::Vec<u8, BUFFER_SIZE> {
-        let (system_state, device_state) = self.calculate_state();
-        self.generate_pattern(collapse(&system_state, &device_state), Scaling::Stretch)
+        let (system_state, device_state) = &self.state;
+        self.generate_pattern(collapse(system_state, device_state), Scaling::Stretch)
     }
 
     fn generate_pattern(
@@ -363,8 +375,12 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         (system_state, device_state)
     }
 
+    fn recalculate_state(&mut self) {
+        self.state = self.calculate_state();
+    }
+
     pub fn calculate_alert_level(&self) -> AlertLevel {
-        let (system_state, device_state) = self.calculate_state();
+        let (system_state, device_state) = &self.state;
         match (system_state, device_state) {
             (SystemState::Ok, DeviceState::Ok) => AlertLevel::Chill,
             (SystemState::Warn, DeviceState::Ok) => AlertLevel::Attentive,
