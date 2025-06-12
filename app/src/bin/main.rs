@@ -221,7 +221,15 @@ async fn buzzer(
     ledc: Ledc<'static>,
     device: &'static DeviceAsyncMutex,
 ) {
-    log::debug!("Buzzer enabled");
+    {
+        let device = device.lock().await;
+        if device.config.buzzer_enabled {
+            log::debug!("Buzzer enabled");
+        } else {
+            log::debug!("Buzzer is disabled, exiting task");
+            return;
+        }
+    }
     let tones = [
         ("c4", 262),
         ("d4", 294),
@@ -553,17 +561,9 @@ async fn main(spawner: Spawner) {
 
     log::debug!("Leds started");
 
-    let buzzer_enabled;
-    {
-        buzzer_enabled = device.lock().await.config.buzzer_enabled;
-    }
     // Buzzer
-    if buzzer_enabled {
-        let buzzer_pin = peripherals.GPIO3;
-        spawner.spawn(buzzer(buzzer_pin, ledc, device)).unwrap();
-    } else {
-        log::debug!("Buzzer disabled");
-    }
+    let buzzer_pin = peripherals.GPIO3;
+    spawner.spawn(buzzer(buzzer_pin, ledc, device)).unwrap();
 
     let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
         .unwrap()
