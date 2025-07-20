@@ -23,7 +23,7 @@ Both of them have their statuses and below you can see how those statuses are ma
 
 The algorithm works like this:
 
-- Take the highest corresponding alert level from the sensor and system state
+- Take the **highest** corresponding alert level from the **sensor and system state**
 - Using patterns from that alert level, choose:
   - Pattern that matches both of the states
   - If no such pattern exists, choose the one that matches either of the states

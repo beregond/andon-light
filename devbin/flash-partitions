@@ -2,7 +2,7 @@
 
 # Check if a filename argument is provided
 if [ -z "$1" ]; then
-  echo "Usage: $0 <filename>"
+  echo "Usage: $0 <file_with_partitions_definition>"
   exit 1
 fi
 

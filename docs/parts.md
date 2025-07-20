@@ -25,3 +25,6 @@
 - toothpick
 
 (To mount device first without soldering - also breadboard plus jumper wires are needed.)
+
+
+![wiring](wiring.png)
