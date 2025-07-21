@@ -401,7 +401,7 @@ async fn rgb_probe_task(
                             measurement.blue,
                         );
                         {
-                            log::trace!("Color detected: {:?}", color);
+                            log::trace!("Color detected: {color:?}");
                             let mut device = device.lock().await;
                             device.andon_light.resolve(ErrorCodes::SE003);
                             // This color schema is made for Prusa MK4 - in future I hope there
@@ -461,7 +461,7 @@ async fn main(spawner: Spawner) {
     controller.start().unwrap();
     let aps: (Vec<wifi::AccessPointInfo, 20>, usize) = controller.scan_n().unwrap();
     for ap in aps.0 {
-        log::info!("Found AP: {:?}", ap);
+        log::info!("Found AP: {ap:?}");
     }
 
     // Configure the LEDC
@@ -532,14 +532,14 @@ async fn main(spawner: Spawner) {
                 }
                 Err(e) => {
                     log::warn!("Seems there is no config file, falling back to default");
-                    log::warn!("{:?}", e);
+                    log::warn!("{e:?}");
                     DeviceConfig::default()
                 }
             }
         }
         Err(e) => {
             log::warn!("Failed to read config file");
-            log::warn!("{:?}", e);
+            log::warn!("{e:?}");
             DeviceConfig::default()
         }
     };
