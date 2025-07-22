@@ -2,6 +2,10 @@
 
 Signal state with andon light!
 
+## Docs
+
+This document is not everything you need to know about this project, more info below in "More docs" section
+
 > [!WARNING]
 > This project is still in early development stage, so it may not work as expected.
 
@@ -42,7 +46,7 @@ Store this in `andon.jso`. Currently there is no support for long file names (ak
 }
 ```
 
-## Parts list
+## More docs
 
 - To see the list of parts needed to build this project, check [this file](docs/parts.md).
 - You will need few 3D printed parts, to print them follow [this guide](3d-models/readme.md).
