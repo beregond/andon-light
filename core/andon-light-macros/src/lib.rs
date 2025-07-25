@@ -62,7 +62,7 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
                                 level = Some(s.value());
                             } else {
                                 let ident = &meta.path.get_ident().unwrap().to_string();
-                                panic!("unsupported attribute - {}", ident);
+                                panic!("unsupported attribute - {ident}");
                             }
                         }
                         _ => panic!("unsupported attribute"),
@@ -125,7 +125,7 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
             #ident::#variant_ident => #message,
         });
         let path: syn::Path =
-            syn::parse_str(format!("andon_light_core::ErrorType::{}", level).as_str())
+            syn::parse_str(format!("andon_light_core::ErrorType::{level}").as_str())
                 .expect("Failed to parse path");
         let segments = path
             .segments

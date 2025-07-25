@@ -252,7 +252,7 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
                 let code_repr = code.as_str();
                 let inserted = self.codes.insert(code).unwrap();
                 if inserted {
-                    log::debug!("Code added {}", code_repr);
+                    log::debug!("Code added {code_repr}");
                 }
                 inserted
             } else {
