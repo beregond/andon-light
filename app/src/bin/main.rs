@@ -37,13 +37,15 @@ use esp_hal::{
     time::Rate,
     Async,
 };
-use esp_hal::{gpio::GpioPin, timer::systimer::SystemTimer};
+use esp_hal::{peripherals::GPIO3, timer::systimer::SystemTimer};
 use esp_wifi::wifi;
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 use tcs3472::Tcs3472;
 extern crate alloc;
+
+esp_bootloader_esp_idf::esp_app_desc!();
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 const DEFAULT_LEDS_AMOUNT: usize = default_from_env!(DEFAULT_LEDS_AMOUNT, 16);
@@ -217,7 +219,7 @@ async fn heartbeat(
 // TODO: Make buzzer task more efficient
 #[embassy_executor::task]
 async fn buzzer(
-    mut buzzer_pin: GpioPin<3>,
+    mut buzzer_pin: GPIO3<'static>,
     ledc: Ledc<'static>,
     device: &'static DeviceAsyncMutex,
 ) {
@@ -302,7 +304,8 @@ async fn buzzer(
                         " " => 0,
                         _ => 5,
                     };
-                    let mut channel = ledc.channel(channel::Number::Channel1, &mut buzzer_pin);
+                    let mut channel =
+                        ledc.channel(channel::Number::Channel1, buzzer_pin.reborrow());
                     channel
                         .configure(channel::config::Config {
                             timer: &lstimer,
@@ -448,19 +451,14 @@ async fn main(spawner: Spawner) {
 
     // Initialization of wifi - for now it is only stub to test that its working, so with with next
     // software update it will be able to actually connect to wifi and do something useful
-    let wifi_ctrl = esp_wifi::init(
-        timer1.timer0,
-        esp_hal::rng::Rng::new(peripherals.RNG),
-        peripherals.RADIO_CLK,
-    )
-    .unwrap();
+    let wifi_ctrl = esp_wifi::init(timer1.timer0, esp_hal::rng::Rng::new(peripherals.RNG)).unwrap();
 
     let (mut controller, _interfaces) = esp_wifi::wifi::new(&wifi_ctrl, peripherals.WIFI).unwrap();
 
     controller.set_mode(wifi::WifiMode::Sta).unwrap();
     controller.start().unwrap();
-    let aps: (Vec<wifi::AccessPointInfo, 20>, usize) = controller.scan_n().unwrap();
-    for ap in aps.0 {
+    let aps: alloc::vec::Vec<wifi::AccessPointInfo> = controller.scan_n(20).unwrap();
+    for ap in aps {
         log::info!("Found AP: {ap:?}");
     }
 
