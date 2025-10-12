@@ -44,8 +44,12 @@ use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 use tcs3472::Tcs3472;
 extern crate alloc;
+use embassy_sync::signal::Signal;
 
 esp_bootloader_esp_idf::esp_app_desc!();
+
+type BuzzerSignal = Signal<CriticalSectionRawMutex, AlertLevel>;
+static BUZZER_SIGNAL: BuzzerSignal = Signal::new();
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 const DEFAULT_LEDS_AMOUNT: usize = default_from_env!(DEFAULT_LEDS_AMOUNT, 16);
@@ -216,12 +220,40 @@ async fn heartbeat(
     }
 }
 
-// TODO: Make buzzer task more efficient
+/// Checks for alert level changes and signals buzzer task if needed,
+/// so buzzer task does not need to lock device mutex all the time, in between notes
+#[embassy_executor::task]
+async fn buzzer_supervisor(device: &'static DeviceAsyncMutex, sender: &'static BuzzerSignal) {
+    let mut ticker = Ticker::every(Duration::from_millis(500));
+    let mut current_level;
+    {
+        let device = device.lock().await;
+        if !device.config.buzzer_enabled {
+            log::debug!("Buzzer is disabled, exiting supervisor task");
+            return;
+        }
+        current_level = device.andon_light.calculate_alert_level();
+    }
+    loop {
+        let alert_level;
+        {
+            let device = device.lock().await;
+            alert_level = device.andon_light.calculate_alert_level();
+        }
+        if current_level != alert_level {
+            current_level = alert_level;
+            sender.signal(alert_level);
+        }
+        ticker.next().await;
+    }
+}
+
 #[embassy_executor::task]
 async fn buzzer(
     mut buzzer_pin: GPIO3<'static>,
     ledc: Ledc<'static>,
     device: &'static DeviceAsyncMutex,
+    signal: &'static BuzzerSignal,
 ) {
     {
         let device = device.lock().await;
@@ -251,41 +283,10 @@ async fn buzzer(
     let urgent_tune: Melody = Vec::from_slice(&[("c6", 1), (" ", 1)]).unwrap();
 
     let mut tune = &staurtup_tune;
-    let mut first_run = true;
     let mut last_level: Option<AlertLevel> = None;
+    let mut switch_to_alert_level: Option<AlertLevel> = None;
     loop {
         'melody: for note in tune {
-            if !first_run {
-                let device = device.lock().await;
-                let alert_level = device.andon_light.calculate_alert_level();
-                let recalc;
-                if let Some(level) = &last_level {
-                    recalc = *level != alert_level;
-                } else {
-                    recalc = true;
-                }
-                if recalc {
-                    match alert_level {
-                        AlertLevel::Chill => {
-                            tune = &chill_tune;
-                        }
-                        AlertLevel::Attentive => {
-                            tune = &attentive_tune;
-                        }
-                        AlertLevel::Important => {
-                            tune = &important_tune;
-                        }
-                        AlertLevel::Urgent => {
-                            tune = &urgent_tune;
-                        }
-                    }
-                    last_level = Some(alert_level);
-                    break 'melody;
-                }
-            }
-            if note.0 == "-" {
-                continue;
-            }
             // Obtain a note in the tune
             for tone in tones {
                 // Find a note match in the tones array and update
@@ -315,25 +316,51 @@ async fn buzzer(
                         .unwrap();
                     for _ in 0..note.1 {
                         Timer::after(Duration::from_millis(100)).await;
-                        if !first_run {
-                            // TODO: Checking for alert level in the same "thread" as buzzer task
-                            // may block (or disort) playing melody - need to find a way to divide
-                            // it.
-                            let device = device.lock().await;
-                            let alert_level = device.andon_light.calculate_alert_level();
-                            match &last_level {
-                                Some(level) if *level != alert_level => break 'melody,
-                                _ => {}
-                            };
+                        // 'is_some' points to the fact that we are NOT in startup tune
+                        // There is funny egdg case when this task and supervisor starts at the
+                        // same time and reads urgent level at the "same" time, because
+                        // you will end up in playing longer beep after startup tune.
+                        // To avoid it - only check for new signal after at leas one 'silent'
+                        // note,so the sound will not compile in longer beep (thats wy we check
+                        // note.0 == " ")
+                        if last_level.is_some() && note.0 == " " {
+                            let value = signal.try_take();
+                            if value.is_some() {
+                                // Since supervisor tracks changes, we can just switch to new level
+                                // without checking what was the last one
+                                switch_to_alert_level = value;
+                                break 'melody;
+                            }
                         }
                     }
                 }
             }
         }
-        if first_run {
-            first_run = false;
-            Timer::after(Duration::from_millis(100)).await;
+        let alert_level;
+        if let Some(level) = switch_to_alert_level {
+            alert_level = level;
+            switch_to_alert_level = None;
+        } else {
+            // Since we have alert level from supervisor - this situation should not happen,
+            // unless after startup tune - so it is justified to waif for device lock.
+            let device = device.lock().await;
+            alert_level = device.andon_light.calculate_alert_level();
         }
+        match alert_level {
+            AlertLevel::Chill => {
+                tune = &chill_tune;
+            }
+            AlertLevel::Attentive => {
+                tune = &attentive_tune;
+            }
+            AlertLevel::Important => {
+                tune = &important_tune;
+            }
+            AlertLevel::Urgent => {
+                tune = &urgent_tune;
+            }
+        }
+        last_level = Some(alert_level);
     }
 }
 
@@ -560,8 +587,13 @@ async fn main(spawner: Spawner) {
     log::debug!("Leds started");
 
     // Buzzer
+    spawner
+        .spawn(buzzer_supervisor(device, &BUZZER_SIGNAL))
+        .unwrap();
     let buzzer_pin = peripherals.GPIO3;
-    spawner.spawn(buzzer(buzzer_pin, ledc, device)).unwrap();
+    spawner
+        .spawn(buzzer(buzzer_pin, ledc, device, &BUZZER_SIGNAL))
+        .unwrap();
 
     let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
         .unwrap()
