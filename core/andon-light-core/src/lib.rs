@@ -212,7 +212,7 @@ pub struct Config {
 
 impl Config {
     pub fn new(leds_amount: u8, brightness: u8) -> Self {
-        if leds_amount <= 1 || leds_amount % 4 != 0 {
+        if leds_amount <= 1 || !leds_amount.is_multiple_of(4) {
             panic!("Leds amount must be greater than 1 and divisible by 4");
         }
         // We don't check brightness, as no point if u8 will exceed 255 - it won't.
