@@ -45,6 +45,7 @@ use static_cell::StaticCell;
 use tcs3472::Tcs3472;
 extern crate alloc;
 use embassy_sync::signal::Signal;
+use esp_radio::wifi;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -372,6 +373,7 @@ async fn buzzer(
             }
         }
         last_level = Some(alert_level);
+        // TODO: There is bug after update of esp-hal, when goinv into idle mode gives two notes in the beginning
     }
 }
 
@@ -568,6 +570,25 @@ async fn main(spawner: Spawner) {
     };
 
     log::debug!("End of config read");
+
+    // Initialization of wifi
+    if !app_config.wifi_ssid.is_empty() && !app_config.wifi_password.is_empty() {
+        log::info!("Connecting to WiFi SSID: {}", app_config.wifi_ssid);
+        let esp_radio_ctrl = esp_radio::init().unwrap();
+
+        // We must initialize some kind of interface and start it.
+        let (mut controller, _interfaces) =
+            esp_radio::wifi::new(&esp_radio_ctrl, peripherals.WIFI, Default::default()).unwrap();
+
+        controller.set_mode(wifi::WifiMode::Sta).unwrap();
+        controller.start().unwrap();
+        let aps: alloc::vec::Vec<wifi::AccessPointInfo> = controller
+            .scan_with_config(wifi::ScanConfig::default())
+            .unwrap();
+        for ap in aps {
+            log::info!("Found AP: {ap:?}");
+        }
+    }
 
     log::debug!("Starting up leds control");
 
