@@ -56,8 +56,8 @@ esp-wifi = { version = "0.15.0", features = [
   "esp32c3",
   "wifi",
 ] }
-heapless = { version = "0.8.0", default-features = false }
-static_cell = { version = "2.1.0", features = ["nightly"] }
+heapless = { version = "^0.9", default-features = false }
+static_cell = { version = "2.1.1" }
 andon-light-core = { path = "../core/andon-light-core/" }
 andon-light-macros = { path = "../core/andon-light-macros/" }
 embassy-sync = { version = "0.6.2", features = ["log"] }
@@ -69,7 +69,7 @@ serde = { version = "1.0.219", default-features = false }
 serde-json-core = { version = "0.6.0", features = ["custom-error-messages"] }
 embedded-hal-bus = "0.3.0"
 tcs3472 = { version = "1.0.0", features = ["async"] }
-esp-bootloader-esp-idf = { version = "0.2.0", features = ["esp32c3", "log-04"] }
+esp-bootloader-esp-idf = { version = "0.3.0", features = ["esp32c3", "log-04"] }
 
 [profile.dev]
 # Rust debug is too slow.

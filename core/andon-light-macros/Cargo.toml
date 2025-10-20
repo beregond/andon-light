@@ -13,5 +13,5 @@ incremental = false
 incremental = false
 
 [dependencies]
-quote = "1.0.38"
-syn = { version = "2.0.98", features = ["derive", "parsing"] }
+quote = "^1.0"
+syn = { version = "^2.0", features = ["derive", "parsing"] }

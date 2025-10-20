@@ -1,5 +1,7 @@
 #![no_std]
 
+use heapless::index_set::FnvIndexSet;
+
 pub mod colors;
 
 /// A marker for a color channel. It only speciefies if the channel is enabled in pattern
@@ -229,7 +231,7 @@ impl Config {
 /// will be solved by "complex generic constants" in Rust, but for now it is no available yet.
 pub struct AndonLight<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> {
     config: Config,
-    codes: heapless::FnvIndexSet<T, U>,
+    codes: FnvIndexSet<T, U>,
     state: (SystemState, DeviceState),
 }
 
@@ -237,7 +239,7 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
     pub const fn new(config: Config) -> Self {
         Self {
             config,
-            codes: heapless::FnvIndexSet::<T, U>::new(),
+            codes: FnvIndexSet::<T, U>::new(),
             state: (SystemState::Ok, DeviceState::Ok),
         }
     }
