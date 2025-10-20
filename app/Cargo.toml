@@ -9,23 +9,16 @@ path = "./src/bin/main.rs"
 test = false
 
 [dependencies]
-embassy-net = { version = "0.6.0", features = [
-  "dhcpv4",
-  "medium-ethernet",
-  "tcp",
-  "udp",
-] }
 embedded-io = "0.6.1"
 embedded-io-async = "0.6.1"
-esp-alloc = "0.8.0"
-esp-backtrace = { version = "0.17.0", features = [
+esp-alloc = { version = "0.9.0", features = ["esp32c3"] }
+esp-backtrace = { version = "0.18.0", features = [
   "esp32c3",
-  "exception-handler",
   "panic-handler",
   "println",
 ] }
-esp-hal = { version = "1.0.0-rc.0", features = ["esp32c3", "unstable"] }
-esp-println = { version = "0.15.0", features = ["esp32c3", "log-04"] }
+esp-hal = { version = "1.0.0-rc.1", features = ["esp32c3", "unstable"] }
+esp-println = { version = "0.16.0", features = ["esp32c3", "log-04"] }
 log = { version = "0.4.21" }
 smoltcp = { version = "0.12.0", default-features = false, features = [
   "medium-ethernet",
@@ -45,23 +38,13 @@ bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5
   "macros",
 ] }
 critical-section = "1.2.0"
-embassy-executor = { version = "0.7.0", features = ["task-arena-size-20480"] }
-embassy-time = { version = "0.4.0", features = ["generic-queue-8"] }
-esp-hal-embassy = { version = "0.9.0", features = ["esp32c3"] }
-esp-wifi = { version = "0.15.0", features = [
-  "ble",
-  "builtin-scheduler",
-  "coex",
-  "esp-alloc",
-  "esp32c3",
-  "wifi",
-] }
+embassy-executor = { version = "0.9.1", features = ["arch-riscv32", "log"] }
+embassy-time = { version = "0.5.0", features = ["generic-queue-8"] }
 heapless = { version = "^0.9", default-features = false }
 static_cell = { version = "2.1.1" }
 andon-light-core = { path = "../core/andon-light-core/" }
 andon-light-macros = { path = "../core/andon-light-macros/" }
-embassy-sync = { version = "0.6.2", features = ["log"] }
-embassy-embedded-hal = "0.3.0"
+embassy-sync = { version = "0.7.2", features = ["log"] }
 embedded-hal-async = "1.0.0"
 embedded-sdmmc = "0.8.1"
 embedded-hal = "1.0.0"
@@ -70,6 +53,13 @@ serde-json-core = { version = "0.6.0", features = ["custom-error-messages"] }
 embedded-hal-bus = "0.3.0"
 tcs3472 = { version = "1.0.0", features = ["async"] }
 esp-bootloader-esp-idf = { version = "0.3.0", features = ["esp32c3", "log-04"] }
+esp-rtos = { version = "0.1.1", features = [
+  "esp32c3",
+  "embassy",
+  "esp-radio",
+  "esp-alloc",
+] }
+embassy-embedded-hal = "0.5.0"
 
 [profile.dev]
 # Rust debug is too slow.

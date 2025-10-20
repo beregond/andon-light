@@ -17,13 +17,15 @@ use embassy_sync::{
 use embassy_time::{Duration, Ticker, Timer};
 use embedded_hal_async::spi::SpiDevice as _;
 use esp_backtrace as _;
+use esp_hal::interrupt::software::SoftwareInterruptControl;
+use esp_hal::peripherals::GPIO3;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{
     clock::CpuClock,
     delay::Delay,
     dma::{DmaRxBuf, DmaTxBuf},
     dma_buffers,
-    gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull},
+    gpio::{DriveMode, Input, InputConfig, Level, Output, OutputConfig, Pull},
     i2c::master::I2c,
     ledc::{
         channel::{self, ChannelIFace},
@@ -37,8 +39,6 @@ use esp_hal::{
     time::Rate,
     Async,
 };
-use esp_hal::{peripherals::GPIO3, timer::systimer::SystemTimer};
-use esp_wifi::wifi;
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
@@ -215,7 +215,7 @@ async fn heartbeat(
         .configure(channel::config::Config {
             timer: &lstimer,
             duty_pct: 10,
-            pin_config: channel::config::PinConfig::PushPull,
+            drive_mode: DriveMode::PushPull,
         })
         .unwrap();
 
@@ -281,7 +281,9 @@ async fn buzzer(
         ("c5", 523),
         ("d5", 587),
         ("c6", 1046),
-        (" ", 1),
+        // Although we set "silent" note here - frequency must not be less than 256, or Divisor
+        // error will be returned from lstimer.
+        (" ", 256),
     ];
     type Melody = Vec<(&'static str, usize), 5>;
     let staurtup_tune: Melody =
@@ -320,7 +322,7 @@ async fn buzzer(
                         .configure(channel::config::Config {
                             timer: &lstimer,
                             duty_pct,
-                            pin_config: channel::config::PinConfig::PushPull,
+                            drive_mode: DriveMode::PushPull,
                         })
                         .unwrap();
                     for _ in 0..note.1 {
@@ -468,7 +470,7 @@ async fn rgb_probe_task(
     }
 }
 
-#[esp_hal_embassy::main]
+#[esp_rtos::main]
 async fn main(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
     log::info!("Hello world!");
@@ -478,12 +480,11 @@ async fn main(spawner: Spawner) {
 
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
-    let timer0 = SystemTimer::new(peripherals.SYSTIMER);
-    esp_hal_embassy::init(timer0.alarm0);
+    let timg0 = TimerGroup::new(peripherals.TIMG0);
+    let software_interrupt = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+    esp_rtos::start(timg0.timer0, software_interrupt.software_interrupt0);
 
     log::info!("Embassy initialized!");
-
-    let timer1 = TimerGroup::new(peripherals.TIMG0);
 
     // Configure the LEDC
     let mut ledc = Ledc::new(peripherals.LEDC);
@@ -567,23 +568,6 @@ async fn main(spawner: Spawner) {
     };
 
     log::debug!("End of config read");
-
-    // Initialization of wifi
-    if !app_config.wifi_ssid.is_empty() && !app_config.wifi_password.is_empty() {
-        log::info!("Connecting to WiFi SSID: {}", app_config.wifi_ssid);
-        let wifi_ctrl =
-            esp_wifi::init(timer1.timer0, esp_hal::rng::Rng::new(peripherals.RNG)).unwrap();
-
-        let (mut controller, _interfaces) =
-            esp_wifi::wifi::new(&wifi_ctrl, peripherals.WIFI).unwrap();
-
-        controller.set_mode(wifi::WifiMode::Sta).unwrap();
-        controller.start().unwrap();
-        let aps: alloc::vec::Vec<wifi::AccessPointInfo> = controller.scan_n(20).unwrap();
-        for ap in aps {
-            log::info!("Found AP: {ap:?}");
-        }
-    }
 
     log::debug!("Starting up leds control");
 
