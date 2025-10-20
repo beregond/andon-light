@@ -62,6 +62,11 @@ const fn _default_leds() -> usize {
 }
 
 #[inline]
+const fn _empty_str() -> &'static str {
+    ""
+}
+
+#[inline]
 const fn _default_brightness() -> u8 {
     10
 }
@@ -119,6 +124,10 @@ struct DeviceConfig {
     leds_amount: usize,
     #[serde(default = "_default_brightness")]
     brightness: u8,
+    #[serde(default = "_empty_str")]
+    wifi_ssid: &'static str,
+    #[serde(default = "_empty_str")]
+    wifi_password: &'static str,
 }
 
 impl Default for DeviceConfig {
@@ -476,19 +485,6 @@ async fn main(spawner: Spawner) {
 
     let timer1 = TimerGroup::new(peripherals.TIMG0);
 
-    // Initialization of wifi - for now it is only stub to test that its working, so with with next
-    // software update it will be able to actually connect to wifi and do something useful
-    let wifi_ctrl = esp_wifi::init(timer1.timer0, esp_hal::rng::Rng::new(peripherals.RNG)).unwrap();
-
-    let (mut controller, _interfaces) = esp_wifi::wifi::new(&wifi_ctrl, peripherals.WIFI).unwrap();
-
-    controller.set_mode(wifi::WifiMode::Sta).unwrap();
-    controller.start().unwrap();
-    let aps: alloc::vec::Vec<wifi::AccessPointInfo> = controller.scan_n(20).unwrap();
-    for ap in aps {
-        log::info!("Found AP: {ap:?}");
-    }
-
     // Configure the LEDC
     let mut ledc = Ledc::new(peripherals.LEDC);
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
@@ -532,11 +528,12 @@ async fn main(spawner: Spawner) {
     log::debug!("Peripherals initialized");
     log::debug!("Reading config from SD card");
 
-    let mut buffer = [0u8; CONFIG_BUFFER_SIZE];
+    static BUFFER: StaticCell<[u8; CONFIG_BUFFER_SIZE]> = StaticCell::new();
+    let buffer = BUFFER.init([0u8; CONFIG_BUFFER_SIZE]);
     let sd_select = Output::new(peripherals.GPIO2, Level::High, OutputConfig::default());
     let sd_reader = SdReader::new(spi_bus, sd_select, Delay::new());
-    // TODO: Need better support for config errors
-    let result = sd_reader.read_config("CONFIG.JSO", &mut buffer).await;
+    // TODO: Need better support for filesystem and config errors
+    let result = sd_reader.read_config("CONFIG.JSO", buffer).await;
 
     let app_config = match result {
         Ok(num_read) => {
@@ -570,6 +567,24 @@ async fn main(spawner: Spawner) {
     };
 
     log::debug!("End of config read");
+
+    // Initialization of wifi
+    if !app_config.wifi_ssid.is_empty() && !app_config.wifi_password.is_empty() {
+        log::info!("Connecting to WiFi SSID: {}", app_config.wifi_ssid);
+        let wifi_ctrl =
+            esp_wifi::init(timer1.timer0, esp_hal::rng::Rng::new(peripherals.RNG)).unwrap();
+
+        let (mut controller, _interfaces) =
+            esp_wifi::wifi::new(&wifi_ctrl, peripherals.WIFI).unwrap();
+
+        controller.set_mode(wifi::WifiMode::Sta).unwrap();
+        controller.start().unwrap();
+        let aps: alloc::vec::Vec<wifi::AccessPointInfo> = controller.scan_n(20).unwrap();
+        for ap in aps {
+            log::info!("Found AP: {ap:?}");
+        }
+    }
+
     log::debug!("Starting up leds control");
 
     let leds_select = Output::new(peripherals.GPIO5, Level::Low, OutputConfig::default());

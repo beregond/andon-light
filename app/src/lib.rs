@@ -48,13 +48,18 @@ impl<'a, M: RawMutex, BUS: embedded_hal::spi::SpiBus> SdReader<'a, M, BUS> {
         let sd_card = SdCard::new(sd_spi_device, self.delay);
 
         let mut volume_mgr = embedded_sdmmc::VolumeManager::new(sd_card, make_time_source());
-        if let Ok(mut volume0) = volume_mgr.open_volume(embedded_sdmmc::VolumeIdx(0)) {
-            let mut root_dir = volume0.open_root_dir().unwrap();
-            let mut my_file = root_dir
-                .open_file_in_dir(filename, embedded_sdmmc::Mode::ReadOnly)
-                .unwrap();
-            let num_read = my_file.read(buffer).unwrap();
-            return Ok(num_read);
+        match volume_mgr.open_volume(embedded_sdmmc::VolumeIdx(0)) {
+            Ok(mut volume0) => {
+                let mut root_dir = volume0.open_root_dir().unwrap();
+                let mut my_file = root_dir
+                    .open_file_in_dir(filename, embedded_sdmmc::Mode::ReadOnly)
+                    .unwrap();
+                let num_read = my_file.read(buffer).unwrap();
+                return Ok(num_read);
+            }
+            Err(e) => {
+                log::debug!("Failed to open volume: {:?}", e);
+            }
         };
         Err(())
     }
