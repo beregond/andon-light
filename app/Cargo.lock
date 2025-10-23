@@ -15,6 +15,7 @@ dependencies = [
  "andon-light-core",
  "andon-light-macros",
  "bleps",
+ "blocking-network-stack",
  "critical-section",
  "embassy-embedded-hal",
  "embassy-executor",
@@ -24,8 +25,6 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-hal-bus",
- "embedded-io 0.6.1",
- "embedded-io-async 0.6.1",
  "embedded-sdmmc",
  "esp-alloc",
  "esp-backtrace",
@@ -153,6 +152,17 @@ dependencies = [
  "quote",
  "syn 1.0.109",
  "uuid",
+]
+
+[[package]]
+name = "blocking-network-stack"
+version = "0.1.0"
+source = "git+https://github.com/bjoernQ/blocking-network-stack.git?rev=b3ecefc#b3ecefc222d8806edd221f266999ca339c52d34e"
+dependencies = [
+ "embedded-io 0.6.1",
+ "heapless 0.8.0",
+ "log",
+ "smoltcp",
 ]
 
 [[package]]
@@ -768,6 +778,10 @@ dependencies = [
  "cfg-if",
  "document-features",
  "embassy-net-driver",
+ "embedded-io 0.6.1",
+ "embedded-io 0.7.1",
+ "embedded-io-async 0.6.1",
+ "embedded-io-async 0.7.0",
  "enumset",
  "esp-alloc",
  "esp-config",
@@ -784,6 +798,7 @@ dependencies = [
  "num-traits",
  "portable-atomic",
  "portable_atomic_enum",
+ "smoltcp",
 ]
 
 [[package]]
@@ -1045,6 +1060,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
 dependencies = [
  "hash32",
+ "portable-atomic",
  "serde",
  "stable_deref_trait",
 ]
@@ -1555,6 +1571,7 @@ dependencies = [
  "byteorder",
  "cfg-if",
  "heapless 0.8.0",
+ "log",
  "managed",
 ]
 

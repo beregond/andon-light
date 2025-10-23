@@ -8,6 +8,7 @@ use andon_light_core::{
     AlertLevel, ErrorCodesBase,
 };
 use andon_light_macros::{default_from_env, ErrorCodesEnum};
+use blocking_network_stack::Stack;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_sync::{
@@ -32,20 +33,25 @@ use esp_hal::{
         timer::{self, TimerIFace},
         LSGlobalClkSource, Ledc, LowSpeed,
     },
+    rng::Rng,
     spi::{
         master::{Config, Spi, SpiDmaBus},
         Mode,
     },
-    time::Rate,
+    time::{self, Rate},
     Async,
 };
+use esp_radio::wifi::{self, ClientConfig, ModeConfig, ScanConfig};
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 use tcs3472::Tcs3472;
 extern crate alloc;
 use embassy_sync::signal::Signal;
-use esp_radio::wifi;
+use smoltcp::{
+    iface::{SocketSet, SocketStorage},
+    wire::DhcpOption,
+};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -577,17 +583,79 @@ async fn main(spawner: Spawner) {
         let esp_radio_ctrl = esp_radio::init().unwrap();
 
         // We must initialize some kind of interface and start it.
-        let (mut controller, _interfaces) =
+        let (mut controller, interfaces) =
             esp_radio::wifi::new(&esp_radio_ctrl, peripherals.WIFI, Default::default()).unwrap();
 
         controller.set_mode(wifi::WifiMode::Sta).unwrap();
         controller.start().unwrap();
-        let aps: alloc::vec::Vec<wifi::AccessPointInfo> = controller
-            .scan_with_config(wifi::ScanConfig::default())
+
+        let mut device = interfaces.sta;
+        let iface = create_interface(&mut device);
+
+        let mut socket_set_entries: [SocketStorage; 3] = Default::default();
+        let mut socket_set = SocketSet::new(&mut socket_set_entries[..]);
+        let mut dhcp_socket = smoltcp::socket::dhcpv4::Socket::new();
+        // we can set a hostname here (or add other DHCP options)
+        dhcp_socket.set_outgoing_options(&[DhcpOption {
+            kind: 12,
+            data: b"esp-radio",
+        }]);
+        socket_set.add(dhcp_socket);
+
+        let rng = Rng::new();
+        let now = || time::Instant::now().duration_since_epoch().as_millis();
+        let stack = Stack::new(iface, device, socket_set, now, rng.random());
+
+        controller
+            .set_power_saving(esp_radio::wifi::PowerSaveMode::None)
             .unwrap();
-        for ap in aps {
-            log::info!("Found AP: {ap:?}");
+
+        let client_config = ModeConfig::Client(
+            ClientConfig::default()
+                .with_ssid(app_config.wifi_ssid.into())
+                .with_password(app_config.wifi_password.into()),
+        );
+        let res = controller.set_config(&client_config);
+        log::debug!("wifi_set_configuration returned {:?}", res);
+
+        controller.start().unwrap();
+        log::debug!("is wifi started: {:?}", controller.is_started());
+
+        log::debug!("Start Wifi Scan");
+        let scan_config = ScanConfig::default().with_max(10);
+        let res = controller.scan_with_config(scan_config).unwrap();
+        for ap in res {
+            log::debug!("{:?}", ap);
         }
+
+        log::debug!("{:?}", controller.capabilities());
+        log::debug!("wifi_connect {:?}", controller.connect());
+
+        // wait to get connected
+        log::debug!("Wait to get connected");
+        loop {
+            match controller.is_connected() {
+                Ok(true) => {
+                    // wait for getting an ip address
+                    log::debug!("Wait to get an ip address");
+                    loop {
+                        stack.work();
+
+                        if stack.is_iface_up() {
+                            log::debug!("got ip {:?}", stack.get_ip_info());
+                            break;
+                        }
+                    }
+                    break;
+                }
+                Ok(false) => {}
+                Err(err) => {
+                    log::debug!("{:?}", err);
+                    break;
+                }
+            }
+        }
+        log::debug!("{:?}", controller.is_connected());
     }
 
     log::debug!("Starting up leds control");
@@ -622,4 +690,24 @@ async fn main(spawner: Spawner) {
         .into_async();
     let sensor = Tcs3472::new(i2c);
     spawner.spawn(rgb_probe_task(sensor, device)).unwrap();
+}
+
+pub fn create_interface(device: &mut esp_radio::wifi::WifiDevice) -> smoltcp::iface::Interface {
+    // users could create multiple instances but since they only have one WifiDevice
+    // they probably can't do anything bad with that
+    smoltcp::iface::Interface::new(
+        smoltcp::iface::Config::new(smoltcp::wire::HardwareAddress::Ethernet(
+            smoltcp::wire::EthernetAddress::from_bytes(&device.mac_address()),
+        )),
+        device,
+        timestamp(),
+    )
+}
+
+fn timestamp() -> smoltcp::time::Instant {
+    smoltcp::time::Instant::from_micros(
+        esp_hal::time::Instant::now()
+            .duration_since_epoch()
+            .as_micros() as i64,
+    )
 }
