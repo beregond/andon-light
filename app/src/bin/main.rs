@@ -8,7 +8,6 @@ use andon_light_core::{
     AlertLevel, ErrorCodesBase,
 };
 use andon_light_macros::{default_from_env, ErrorCodesEnum};
-use blocking_network_stack::Stack;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_sync::{
@@ -38,20 +37,18 @@ use esp_hal::{
         master::{Config, Spi, SpiDmaBus},
         Mode,
     },
-    time::{self, Rate},
+    time::Rate,
     Async,
 };
-use esp_radio::wifi::{self, ClientConfig, ModeConfig, ScanConfig};
+use esp_radio::wifi::{
+    ClientConfig, ModeConfig, WifiController, WifiDevice, WifiEvent, WifiStaState,
+};
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 use tcs3472::Tcs3472;
 extern crate alloc;
 use embassy_sync::signal::Signal;
-use smoltcp::{
-    iface::{SocketSet, SocketStorage},
-    wire::DhcpOption,
-};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -379,7 +376,7 @@ async fn buzzer(
             }
         }
         last_level = Some(alert_level);
-        // TODO: There is bug after update of esp-hal, when goinv into idle mode gives two notes in the beginning
+        // TODO: There is bug after update of esp-hal, when going into idle mode gives two notes in the beginning
     }
 }
 
@@ -476,6 +473,11 @@ async fn rgb_probe_task(
         }
         ticker.next().await;
     }
+}
+
+#[embassy_executor::task]
+async fn net_task(mut runner: embassy_net::Runner<'static, WifiDevice<'static>>) -> ! {
+    runner.run().await
 }
 
 #[esp_rtos::main]
@@ -579,83 +581,38 @@ async fn main(spawner: Spawner) {
 
     // Initialization of wifi
     if !app_config.wifi_ssid.is_empty() && !app_config.wifi_password.is_empty() {
+        static NET_RESOURCES: StaticCell<esp_radio::Controller> = StaticCell::new();
         log::info!("Connecting to WiFi SSID: {}", app_config.wifi_ssid);
-        let esp_radio_ctrl = esp_radio::init().unwrap();
+        let esp_radio_ctrl = NET_RESOURCES.init(esp_radio::init().unwrap());
 
         // We must initialize some kind of interface and start it.
-        let (mut controller, interfaces) =
-            esp_radio::wifi::new(&esp_radio_ctrl, peripherals.WIFI, Default::default()).unwrap();
+        let (controller, interfaces) =
+            esp_radio::wifi::new(esp_radio_ctrl, peripherals.WIFI, Default::default()).unwrap();
 
-        controller.set_mode(wifi::WifiMode::Sta).unwrap();
-        controller.start().unwrap();
-
-        let mut device = interfaces.sta;
-        let iface = create_interface(&mut device);
-
-        let mut socket_set_entries: [SocketStorage; 3] = Default::default();
-        let mut socket_set = SocketSet::new(&mut socket_set_entries[..]);
-        let mut dhcp_socket = smoltcp::socket::dhcpv4::Socket::new();
-        // we can set a hostname here (or add other DHCP options)
-        dhcp_socket.set_outgoing_options(&[DhcpOption {
-            kind: 12,
-            data: b"esp-radio",
-        }]);
-        socket_set.add(dhcp_socket);
-
+        let wifi_interface = interfaces.sta;
+        let config = embassy_net::Config::dhcpv4(Default::default());
         let rng = Rng::new();
-        let now = || time::Instant::now().duration_since_epoch().as_millis();
-        let stack = Stack::new(iface, device, socket_set, now, rng.random());
+        let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
-        controller
-            .set_power_saving(esp_radio::wifi::PowerSaveMode::None)
-            .unwrap();
+        // Init network stack
+        static RESOURCES: StaticCell<embassy_net::StackResources<5>> = StaticCell::new();
+        let (stack, runner) = embassy_net::new(
+            wifi_interface,
+            config,
+            RESOURCES.init(embassy_net::StackResources::new()),
+            seed,
+        );
 
-        let client_config = ModeConfig::Client(
+        let mode_config = ModeConfig::Client(
             ClientConfig::default()
                 .with_ssid(app_config.wifi_ssid.into())
                 .with_password(app_config.wifi_password.into()),
         );
-        let res = controller.set_config(&client_config);
-        log::debug!("wifi_set_configuration returned {:?}", res);
 
-        controller.start().unwrap();
-        log::debug!("is wifi started: {:?}", controller.is_started());
-
-        log::debug!("Start Wifi Scan");
-        let scan_config = ScanConfig::default().with_max(10);
-        let res = controller.scan_with_config(scan_config).unwrap();
-        for ap in res {
-            log::debug!("{:?}", ap);
-        }
-
-        log::debug!("{:?}", controller.capabilities());
-        log::debug!("wifi_connect {:?}", controller.connect());
-
-        // wait to get connected
-        log::debug!("Wait to get connected");
-        loop {
-            match controller.is_connected() {
-                Ok(true) => {
-                    // wait for getting an ip address
-                    log::debug!("Wait to get an ip address");
-                    loop {
-                        stack.work();
-
-                        if stack.is_iface_up() {
-                            log::debug!("got ip {:?}", stack.get_ip_info());
-                            break;
-                        }
-                    }
-                    break;
-                }
-                Ok(false) => {}
-                Err(err) => {
-                    log::debug!("{:?}", err);
-                    break;
-                }
-            }
-        }
-        log::debug!("{:?}", controller.is_connected());
+        spawner.spawn(net_task(runner)).ok();
+        spawner
+            .spawn(connection(controller, stack, mode_config))
+            .ok();
     }
 
     log::debug!("Starting up leds control");
@@ -692,22 +649,54 @@ async fn main(spawner: Spawner) {
     spawner.spawn(rgb_probe_task(sensor, device)).unwrap();
 }
 
-pub fn create_interface(device: &mut esp_radio::wifi::WifiDevice) -> smoltcp::iface::Interface {
-    // users could create multiple instances but since they only have one WifiDevice
-    // they probably can't do anything bad with that
-    smoltcp::iface::Interface::new(
-        smoltcp::iface::Config::new(smoltcp::wire::HardwareAddress::Ethernet(
-            smoltcp::wire::EthernetAddress::from_bytes(&device.mac_address()),
-        )),
-        device,
-        timestamp(),
-    )
-}
+#[embassy_executor::task]
+async fn connection(
+    mut controller: WifiController<'static>,
+    stack: embassy_net::Stack<'static>,
+    client_config: ModeConfig,
+) {
+    log::debug!("start connection task");
+    log::debug!("Device capabilities: {:?}", controller.capabilities());
+    loop {
+        if let WifiStaState::Connected = esp_radio::wifi::sta_state() {
+            // wait until we're no longer connected
+            controller.wait_for_event(WifiEvent::StaDisconnected).await;
+            Timer::after(Duration::from_millis(5000)).await
+        }
+        if !matches!(controller.is_started(), Ok(true)) {
+            controller.set_config(&client_config).unwrap();
+            log::debug!("Starting wifi");
+            controller.start_async().await.unwrap();
+            log::debug!("Wifi started!");
+        }
+        // TODO: await below is ONLY to postpone `connect_async` which takes long and makes
+        // test procedure seem to lag
+        Timer::after(Duration::from_millis(2000)).await;
+        log::debug!("About to connect...");
 
-fn timestamp() -> smoltcp::time::Instant {
-    smoltcp::time::Instant::from_micros(
-        esp_hal::time::Instant::now()
-            .duration_since_epoch()
-            .as_micros() as i64,
-    )
+        match controller.connect_async().await {
+            Ok(_) => {
+                log::debug!("Wifi connected!");
+                loop {
+                    if stack.is_link_up() {
+                        break;
+                    }
+                    Timer::after(Duration::from_millis(500)).await;
+                }
+
+                log::debug!("Waiting to get IP address...");
+                loop {
+                    if let Some(config) = stack.config_v4() {
+                        log::debug!("Got IP: {}", config.address);
+                        break;
+                    }
+                    Timer::after(Duration::from_millis(500)).await;
+                }
+            }
+            Err(e) => {
+                log::debug!("Failed to connect to wifi: {e:?}");
+                Timer::after(Duration::from_millis(5000)).await
+            }
+        }
+    }
 }
