@@ -52,8 +52,16 @@ use embassy_sync::signal::Signal;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
+#[derive(Debug)]
+pub enum WifiState {
+    Disconnected,
+    Connected,
+}
+
 type BuzzerSignal = Signal<CriticalSectionRawMutex, AlertLevel>;
+type WifiSignal = Signal<CriticalSectionRawMutex, WifiState>;
 static BUZZER_SIGNAL: BuzzerSignal = Signal::new();
+static WIFI_SIGNAL: WifiSignal = Signal::new();
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 const DEFAULT_LEDS_AMOUNT: usize = default_from_env!(DEFAULT_LEDS_AMOUNT, 16);
@@ -83,6 +91,11 @@ const fn _default_true() -> bool {
 #[inline]
 const fn _default_version() -> u32 {
     1
+}
+
+#[inline]
+const fn _default_mqtt_port() -> u16 {
+    1883
 }
 
 type SpiBus = Mutex<NoopRawMutex, SpiDmaBus<'static, Async>>;
@@ -132,6 +145,14 @@ struct DeviceConfig {
     wifi_ssid: &'static str,
     #[serde(default = "_empty_str")]
     wifi_password: &'static str,
+    #[serde(default = "_empty_str")]
+    mqtt_host: &'static str,
+    #[serde(default = "_default_mqtt_port")]
+    mqtt_port: u16,
+    #[serde(default = "_empty_str")]
+    mqtt_username: &'static str,
+    #[serde(default = "_empty_str")]
+    mqtt_password: &'static str,
 }
 
 impl Default for DeviceConfig {
@@ -477,7 +498,7 @@ async fn rgb_probe_task(
 
 #[embassy_executor::task]
 async fn net_task(mut runner: embassy_net::Runner<'static, WifiDevice<'static>>) -> ! {
-    runner.run().await
+    runner.run().await;
 }
 
 #[esp_rtos::main]
@@ -611,8 +632,16 @@ async fn main(spawner: Spawner) {
 
         spawner.spawn(net_task(runner)).ok();
         spawner
-            .spawn(connection(controller, stack, mode_config))
+            .spawn(connection(controller, stack, mode_config, &WIFI_SIGNAL))
             .ok();
+
+        if !app_config.mqtt_host.is_empty() {
+            spawner.spawn(mqtt_publisher(&WIFI_SIGNAL)).ok();
+        } else {
+            log::info!("MQTT host is empty, skipping MQTT initialization");
+        }
+    } else {
+        log::info!("WiFi SSID or password is empty, skipping WiFi initialization, skipping MQTT initialization");
     }
 
     log::debug!("Starting up leds control");
@@ -654,6 +683,7 @@ async fn connection(
     mut controller: WifiController<'static>,
     stack: embassy_net::Stack<'static>,
     client_config: ModeConfig,
+    wifi_signal: &'static WifiSignal,
 ) {
     log::debug!("start connection task");
     log::debug!("Device capabilities: {:?}", controller.capabilities());
@@ -692,11 +722,33 @@ async fn connection(
                     }
                     Timer::after(Duration::from_millis(500)).await;
                 }
+                wifi_signal.signal(WifiState::Connected);
             }
             Err(e) => {
                 log::debug!("Failed to connect to wifi: {e:?}");
+                wifi_signal.signal(WifiState::Disconnected);
                 Timer::after(Duration::from_millis(5000)).await
             }
         }
+    }
+}
+
+#[embassy_executor::task]
+async fn mqtt_publisher(wifi_signal: &'static WifiSignal) {
+    let mut current_state: WifiState;
+    loop {
+        current_state = wifi_signal.wait().await;
+        match current_state {
+            WifiState::Connected => {
+                log::debug!("MQTT publisher detected WiFi connected, starting MQTT client...");
+                // Here would be the code to start and manage the MQTT client
+                break;
+            }
+            WifiState::Disconnected => {
+                log::debug!("MQTT publisher detected WiFi disconnected, waiting...");
+                continue;
+            }
+        }
+        // Put logic here
     }
 }
