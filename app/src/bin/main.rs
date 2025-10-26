@@ -10,6 +10,7 @@ use andon_light_core::{
 use andon_light_macros::{default_from_env, ErrorCodesEnum};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
+use embassy_net::{dns::DnsQueryType, tcp::TcpSocket};
 use embassy_sync::{
     blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex},
     mutex::Mutex,
@@ -49,6 +50,11 @@ use static_cell::StaticCell;
 use tcs3472::Tcs3472;
 extern crate alloc;
 use embassy_sync::signal::Signal;
+use rust_mqtt::{
+    client::client::MqttClient,
+    packet::v5::{publish_packet::QualityOfService::QoS1, reason_codes::ReasonCode},
+    utils::rng_generator::CountingRng,
+};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -636,7 +642,16 @@ async fn main(spawner: Spawner) {
             .ok();
 
         if !app_config.mqtt_host.is_empty() {
-            spawner.spawn(mqtt_publisher(&WIFI_SIGNAL)).ok();
+            spawner
+                .spawn(mqtt_publisher(
+                    stack,
+                    &WIFI_SIGNAL,
+                    app_config.mqtt_host,
+                    app_config.mqtt_port,
+                    app_config.mqtt_username,
+                    app_config.mqtt_password,
+                ))
+                .ok();
         } else {
             log::info!("MQTT host is empty, skipping MQTT initialization");
         }
@@ -734,21 +749,101 @@ async fn connection(
 }
 
 #[embassy_executor::task]
-async fn mqtt_publisher(wifi_signal: &'static WifiSignal) {
+async fn mqtt_publisher(
+    stack: embassy_net::Stack<'static>,
+    wifi_signal: &'static WifiSignal,
+    mqtt_host: &'static str,
+    mqtt_port: u16,
+    mqtt_username: &'static str,
+    mqtt_password: &'static str,
+) {
     let mut current_state: WifiState;
     loop {
         current_state = wifi_signal.wait().await;
         match current_state {
             WifiState::Connected => {
                 log::debug!("MQTT publisher detected WiFi connected, starting MQTT client...");
-                // Here would be the code to start and manage the MQTT client
-                break;
             }
             WifiState::Disconnected => {
                 log::debug!("MQTT publisher detected WiFi disconnected, waiting...");
                 continue;
             }
         }
+
+        let mut rx_buffer = [0; 4096];
+        let mut tx_buffer = [0; 4096];
+
+        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+        socket.set_timeout(Some(embassy_time::Duration::from_secs(30)));
         // Put logic here
+        let address = match stack
+            .dns_query(mqtt_host, DnsQueryType::A)
+            .await
+            .map(|a| a[0])
+        {
+            Ok(address) => address,
+            Err(e) => {
+                log::debug!("DNS lookup error: {e:?}");
+                // TODO: Better backoff strategy
+                continue;
+            }
+        };
+        let remote_endpoint = (address, mqtt_port);
+        log::debug!("MQTT connecting to {remote_endpoint:?}...");
+        if let Err(e) = socket.connect(remote_endpoint).await {
+            log::debug!("connect error: {:?}", e);
+            continue;
+        }
+        log::debug!("connected");
+
+        // TODO: Typology
+        let mut config: rust_mqtt::client::client_config::ClientConfig<'_, 5, CountingRng> =
+            rust_mqtt::client::client_config::ClientConfig::new(
+                rust_mqtt::client::client_config::MqttVersion::MQTTv5,
+                CountingRng(20000),
+            );
+        config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
+        // TODO: Make client ID configurable, or generate from MAC
+        config.add_client_id("andon_light_device");
+        config.max_packet_size = 100;
+        config.keep_alive = 12;
+
+        if !mqtt_username.is_empty() && !mqtt_password.is_empty() {
+            log::debug!("Using MQTT username: {}", mqtt_username);
+            config.add_username(mqtt_username);
+            config.add_password(mqtt_password);
+        } else {
+            log::debug!("No MQTT username/password provided, connecting anonymously");
+        }
+
+        let mut writebuf = [0; 1024];
+        let mut readbuf = [0; 1024];
+        let mut client =
+            MqttClient::<_, 5, _>::new(socket, &mut writebuf, 80, &mut readbuf, 80, config);
+
+        match client.connect_to_broker().await {
+            Ok(()) => {
+                log::debug!("Connected to broker");
+            }
+            Err(mqtt_error) => {
+                if let ReasonCode::NetworkError = mqtt_error {
+                    log::debug!("MQTT Network Error");
+                } else {
+                    log::debug!("Other MQTT Error: {:?}", mqtt_error);
+                }
+            }
+        }
+
+        match client
+            .send_message("andon/light/status", b"Hello world!", QoS1, false)
+            .await
+        {
+            Ok(()) => {
+                log::debug!("MQTT message sent successfully");
+            }
+            Err(mqtt_error) => {
+                log::debug!("Failed to send MQTT message: {:?}", mqtt_error);
+            }
+        }
     }
 }
