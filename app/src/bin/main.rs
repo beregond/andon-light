@@ -8,6 +8,7 @@ use andon_light_core::{
     AlertLevel, ErrorCodesBase,
 };
 use andon_light_macros::{default_from_env, ErrorCodesEnum};
+use core::fmt::Write;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_net::{dns::DnsQueryType, tcp::TcpSocket};
@@ -18,6 +19,7 @@ use embassy_sync::{
 use embassy_time::{Duration, Ticker, Timer};
 use embedded_hal_async::spi::SpiDevice as _;
 use esp_backtrace as _;
+use esp_hal::efuse::Efuse;
 use esp_hal::interrupt::software::SoftwareInterruptControl;
 use esp_hal::peripherals::GPIO3;
 use esp_hal::timer::timg::TimerGroup;
@@ -104,6 +106,17 @@ const fn _default_mqtt_port() -> u16 {
     1883
 }
 
+#[inline]
+fn device_id() -> heapless::String<12> {
+    let mac = Efuse::read_base_mac_address();
+    let mut s = heapless::String::<12>::new();
+    // write!(s, "{:012X}", mac).unwrap();
+    for b in mac {
+        write!(s, "{:02X}", b).unwrap();
+    }
+    s
+}
+
 type SpiBus = Mutex<NoopRawMutex, SpiDmaBus<'static, Async>>;
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, ErrorCodesEnum)]
@@ -141,6 +154,8 @@ struct DeviceConfig {
     // Maybe use string for version in future?
     #[serde(default = "_default_version")]
     version: u32,
+    #[serde(default = "_empty_str")]
+    device_id: &'static str,
     #[serde(default = "_default_true")]
     buzzer_enabled: bool,
     #[serde(default = "_default_leds")]
@@ -758,6 +773,9 @@ async fn mqtt_publisher(
     mqtt_password: &'static str,
 ) {
     let mut current_state: WifiState;
+    // let device_id = device_id();
+    let mut unique_id = heapless::String::<32>::new();
+    write!(unique_id, "esp32c3-{}", device_id()).unwrap();
     loop {
         current_state = wifi_signal.wait().await;
         match current_state {
@@ -816,10 +834,11 @@ async fn mqtt_publisher(
             log::debug!("No MQTT username/password provided, connecting anonymously");
         }
 
-        let mut writebuf = [0; 1024];
-        let mut readbuf = [0; 1024];
+        // TODO: figure out those buffers sizes
+        let mut writebuf = [0; 2048];
+        let mut readbuf = [0; 2048];
         let mut client =
-            MqttClient::<_, 5, _>::new(socket, &mut writebuf, 80, &mut readbuf, 80, config);
+            MqttClient::<_, 5, _>::new(socket, &mut writebuf, 160, &mut readbuf, 160, config);
 
         match client.connect_to_broker().await {
             Ok(()) => {
@@ -835,7 +854,12 @@ async fn mqtt_publisher(
         }
 
         match client
-            .send_message("andon/light/status", b"Hello world!", QoS1, false)
+            .send_message(
+                &generate_mqtt_topic(&unique_id),
+                generate_json_message(&unique_id).as_bytes(),
+                QoS1,
+                false,
+            )
             .await
         {
             Ok(()) => {
@@ -846,4 +870,22 @@ async fn mqtt_publisher(
             }
         }
     }
+}
+
+pub fn generate_mqtt_topic(device_id: &heapless::String<32>) -> heapless::String<40> {
+    let mut topic = heapless::String::<40>::new();
+    write!(topic, "andon/{}", device_id).unwrap();
+    topic
+}
+
+pub fn generate_json_message(device_id: &heapless::String<32>) -> heapless::String<70> {
+    // Serialize JSON manually (no serde, for no_std)
+    let mut message = heapless::String::<70>::new();
+    write!(
+        message,
+        r#"{{"status": "started", "device_id": "{}"}}"#,
+        device_id
+    )
+    .unwrap();
+    message
 }
