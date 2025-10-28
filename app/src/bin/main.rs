@@ -773,9 +773,12 @@ async fn mqtt_publisher(
     mqtt_password: &'static str,
 ) {
     let mut current_state: WifiState;
-    // let device_id = device_id();
     let mut unique_id = heapless::String::<32>::new();
-    write!(unique_id, "esp32c3-{}", device_id()).unwrap();
+    write!(unique_id, "light-{}", device_id()).unwrap();
+    let lwt_payload = generate_json_message(&unique_id, "offline");
+    let system_topic = generate_mqtt_topic(&unique_id, "system");
+    let device_topic = generate_mqtt_topic(&unique_id, "device");
+
     loop {
         current_state = wifi_signal.wait().await;
         match current_state {
@@ -821,10 +824,10 @@ async fn mqtt_publisher(
                 CountingRng(20000),
             );
         config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
-        // TODO: Make client ID configurable, or generate from MAC
-        config.add_client_id("andon_light_device");
+        config.add_client_id(&unique_id);
         config.max_packet_size = 100;
-        config.keep_alive = 12;
+        config.keep_alive = 60;
+        config.add_will(&system_topic, lwt_payload.as_bytes(), false);
 
         if !mqtt_username.is_empty() && !mqtt_password.is_empty() {
             log::debug!("Using MQTT username: {}", mqtt_username);
@@ -834,9 +837,8 @@ async fn mqtt_publisher(
             log::debug!("No MQTT username/password provided, connecting anonymously");
         }
 
-        // TODO: figure out those buffers sizes
-        let mut writebuf = [0; 2048];
-        let mut readbuf = [0; 2048];
+        let mut writebuf = [0; 1024];
+        let mut readbuf = [0; 1024];
         let mut client =
             MqttClient::<_, 5, _>::new(socket, &mut writebuf, 160, &mut readbuf, 160, config);
 
@@ -852,39 +854,56 @@ async fn mqtt_publisher(
                 }
             }
         }
+        // TODO: Handle all the unwraps
+        client.send_ping().await.unwrap();
 
-        match client
+        client
             .send_message(
-                &generate_mqtt_topic(&unique_id),
-                generate_json_message(&unique_id).as_bytes(),
+                &system_topic,
+                generate_json_message(&unique_id, "online").as_bytes(),
                 QoS1,
                 false,
             )
             .await
-        {
-            Ok(()) => {
-                log::debug!("MQTT message sent successfully");
+            .unwrap();
+
+        loop {
+            match client
+                .send_message(
+                    &device_topic,
+                    generate_json_message(&unique_id, "imdoingstuff").as_bytes(),
+                    QoS1,
+                    false,
+                )
+                .await
+            {
+                Ok(()) => {
+                    log::debug!("MQTT message sent successfully");
+                }
+                Err(mqtt_error) => {
+                    log::debug!("Failed to send MQTT message: {:?}", mqtt_error);
+                }
             }
-            Err(mqtt_error) => {
-                log::debug!("Failed to send MQTT message: {:?}", mqtt_error);
-            }
+            Timer::after(Duration::from_secs(10)).await;
         }
     }
 }
 
-pub fn generate_mqtt_topic(device_id: &heapless::String<32>) -> heapless::String<40> {
+pub fn generate_mqtt_topic(device_id: &heapless::String<32>, suffix: &str) -> heapless::String<40> {
     let mut topic = heapless::String::<40>::new();
-    write!(topic, "andon/{}", device_id).unwrap();
+    write!(topic, "andon/{}/{}", device_id, suffix).unwrap();
     topic
 }
 
-pub fn generate_json_message(device_id: &heapless::String<32>) -> heapless::String<70> {
-    // Serialize JSON manually (no serde, for no_std)
+pub fn generate_json_message(
+    device_id: &heapless::String<32>,
+    status: &str,
+) -> heapless::String<70> {
     let mut message = heapless::String::<70>::new();
     write!(
         message,
-        r#"{{"status": "started", "device_id": "{}"}}"#,
-        device_id
+        r#"{{"status": "{}", "id": "{}"}}"#,
+        status, device_id
     )
     .unwrap();
     message
