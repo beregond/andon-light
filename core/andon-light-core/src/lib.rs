@@ -140,6 +140,7 @@ static PATTERN_SYSTEM_ERROR: Pattern = [OFF, MAGENTA, OFF, OFF];
 // - when both system and device are in error state
 static PATTERN_FATAL_ERROR: Pattern = [OFF, MAGENTA, OFF, RED];
 
+#[derive(Clone)]
 pub enum DeviceState {
     Ok,    // I don't have to do anything, the system is running
     Idle,  // the system is idle, I may have to do something, but I don't have to do it now
@@ -147,10 +148,32 @@ pub enum DeviceState {
     Error, // I have to do something now
 }
 
+impl DeviceState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DeviceState::Ok => "ok",
+            DeviceState::Idle => "idle",
+            DeviceState::Warn => "warn",
+            DeviceState::Error => "error",
+        }
+    }
+}
+
+#[derive(Clone)]
 pub enum SystemState {
     Ok,    // Everything is ok
     Warn,  // There is minor problem, that does not prevent the system from working
     Error, // There is a problem that prevents the system from working
+}
+
+impl SystemState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SystemState::Ok => "ok",
+            SystemState::Warn => "warn",
+            SystemState::Error => "error",
+        }
+    }
 }
 
 // Combination of system and device states
@@ -196,7 +219,9 @@ fn collapse(system: &SystemState, device: &DeviceState) -> Pattern {
     }
 }
 
-pub trait ErrorCodesBase: Sized + core::fmt::Debug + Eq + PartialEq + core::hash::Hash {
+pub trait ErrorCodesBase:
+    Sized + core::fmt::Debug + Eq + PartialEq + core::hash::Hash + Copy
+{
     const MIN_SET_SIZE: usize;
 
     fn as_str(&self) -> &'static str;
@@ -381,6 +406,10 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         self.state = self.calculate_state();
     }
 
+    pub fn get_state(&self) -> (SystemState, DeviceState) {
+        self.state.clone()
+    }
+
     pub fn calculate_alert_level(&self) -> AlertLevel {
         let (system_state, device_state) = &self.state;
         match (system_state, device_state) {
@@ -409,6 +438,14 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         ];
 
         core::array::from_fn(|i| self.generate_pattern(test_procedure[i], Scaling::Repeat))
+    }
+
+    pub fn get_codes(&self) -> heapless::Vec<T, U> {
+        let mut vec = heapless::Vec::<T, U>::new();
+        for code in &self.codes {
+            vec.push(*code).unwrap();
+        }
+        vec
     }
 }
 

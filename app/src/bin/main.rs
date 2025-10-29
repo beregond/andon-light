@@ -119,7 +119,7 @@ fn device_id() -> heapless::String<12> {
 
 type SpiBus = Mutex<NoopRawMutex, SpiDmaBus<'static, Async>>;
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone, ErrorCodesEnum)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, ErrorCodesEnum, Copy)]
 pub enum ErrorCodes {
     #[code(message = "Ok", level = "ok")]
     Ok,
@@ -621,6 +621,39 @@ async fn main(spawner: Spawner) {
 
     log::debug!("End of config read");
 
+    log::debug!("Starting up leds control");
+
+    let leds_select = Output::new(peripherals.GPIO5, Level::Low, OutputConfig::default());
+    let spi_dev = SpiDevice::new(spi_bus, leds_select);
+
+    let led_reset = Output::new(peripherals.GPIO20, Level::High, OutputConfig::default());
+
+    static ANDON: StaticCell<DeviceAsyncMutex> = StaticCell::new();
+
+    let device = ANDON.init(Mutex::new(Device::new(app_config.clone())));
+    spawner
+        .spawn(run_andon_light(spi_dev, device, led_reset))
+        .unwrap();
+
+    log::debug!("Leds started");
+
+    // Buzzer
+    spawner
+        .spawn(buzzer_supervisor(device, &BUZZER_SIGNAL))
+        .unwrap();
+    let buzzer_pin = peripherals.GPIO3;
+    spawner
+        .spawn(buzzer(buzzer_pin, ledc, device, &BUZZER_SIGNAL))
+        .unwrap();
+
+    let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
+        .unwrap()
+        .with_sda(peripherals.GPIO6)
+        .with_scl(peripherals.GPIO7)
+        .into_async();
+    let sensor = Tcs3472::new(i2c);
+    spawner.spawn(rgb_probe_task(sensor, device)).unwrap();
+
     // Initialization of wifi
     if !app_config.wifi_ssid.is_empty() && !app_config.wifi_password.is_empty() {
         static NET_RESOURCES: StaticCell<esp_radio::Controller> = StaticCell::new();
@@ -659,6 +692,7 @@ async fn main(spawner: Spawner) {
         if !app_config.mqtt_host.is_empty() {
             spawner
                 .spawn(mqtt_publisher(
+                    device,
                     stack,
                     &WIFI_SIGNAL,
                     app_config.mqtt_host,
@@ -673,39 +707,6 @@ async fn main(spawner: Spawner) {
     } else {
         log::info!("WiFi SSID or password is empty, skipping WiFi initialization, skipping MQTT initialization");
     }
-
-    log::debug!("Starting up leds control");
-
-    let leds_select = Output::new(peripherals.GPIO5, Level::Low, OutputConfig::default());
-    let spi_dev = SpiDevice::new(spi_bus, leds_select);
-
-    let led_reset = Output::new(peripherals.GPIO20, Level::High, OutputConfig::default());
-
-    static ANDON: StaticCell<DeviceAsyncMutex> = StaticCell::new();
-
-    let device = ANDON.init(Mutex::new(Device::new(app_config)));
-    spawner
-        .spawn(run_andon_light(spi_dev, device, led_reset))
-        .unwrap();
-
-    log::debug!("Leds started");
-
-    // Buzzer
-    spawner
-        .spawn(buzzer_supervisor(device, &BUZZER_SIGNAL))
-        .unwrap();
-    let buzzer_pin = peripherals.GPIO3;
-    spawner
-        .spawn(buzzer(buzzer_pin, ledc, device, &BUZZER_SIGNAL))
-        .unwrap();
-
-    let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
-        .unwrap()
-        .with_sda(peripherals.GPIO6)
-        .with_scl(peripherals.GPIO7)
-        .into_async();
-    let sensor = Tcs3472::new(i2c);
-    spawner.spawn(rgb_probe_task(sensor, device)).unwrap();
 }
 
 #[embassy_executor::task]
@@ -765,6 +766,7 @@ async fn connection(
 
 #[embassy_executor::task]
 async fn mqtt_publisher(
+    device: &'static DeviceAsyncMutex,
     stack: embassy_net::Stack<'static>,
     wifi_signal: &'static WifiSignal,
     mqtt_host: &'static str,
@@ -868,13 +870,36 @@ async fn mqtt_publisher(
             .unwrap();
 
         loop {
+            let state;
+            let codes;
+            {
+                let device = device.lock().await;
+                state = device.andon_light.get_state();
+                codes = device.andon_light.get_codes();
+            }
+            let mut codes_repr: heapless::String<100> = heapless::String::new();
+            codes_repr.push_str("[").unwrap();
+            for (i, code) in codes.iter().enumerate() {
+                if i > 0 {
+                    // Add a comma separator between elements (but not before the first one)
+                    codes_repr.push_str(",").unwrap();
+                }
+                codes_repr.push_str(code.as_str()).unwrap(); // Add each enum as a string
+            }
+            codes_repr.push_str("]").unwrap();
+
+            let mut message = heapless::String::<150>::new();
+            write!(
+                message,
+                r#"{{"id": "{}", "device_state": "{}", "system_state": "{}", "codes": {}}}"#,
+                &unique_id,
+                state.0.as_str(),
+                state.1.as_str(),
+                codes_repr
+            )
+            .unwrap();
             match client
-                .send_message(
-                    &device_topic,
-                    generate_json_message(&unique_id, "imdoingstuff").as_bytes(),
-                    QoS1,
-                    false,
-                )
+                .send_message(&device_topic, message.as_bytes(), QoS1, false)
                 .await
             {
                 Ok(()) => {
@@ -884,7 +909,7 @@ async fn mqtt_publisher(
                     log::debug!("Failed to send MQTT message: {:?}", mqtt_error);
                 }
             }
-            Timer::after(Duration::from_secs(10)).await;
+            Timer::after(Duration::from_secs(20)).await;
         }
     }
 }
