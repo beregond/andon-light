@@ -52,8 +52,10 @@ use static_cell::StaticCell;
 use tcs3472::Tcs3472;
 extern crate alloc;
 use embassy_sync::signal::Signal;
+use embassy_sync::watch::Watch;
 use rust_mqtt::{
     client::client::MqttClient,
+    client::client_config::{ClientConfig as MqttClientConfig, MqttVersion::MQTTv5},
     packet::v5::{publish_packet::QualityOfService::QoS1, reason_codes::ReasonCode},
     utils::rng_generator::CountingRng,
 };
@@ -67,6 +69,8 @@ pub enum WifiState {
 }
 
 type BuzzerSignal = Signal<CriticalSectionRawMutex, AlertLevel>;
+type AndonNotifier = Watch<CriticalSectionRawMutex, AlertLevel, 3>;
+type AndonWatch = Watch<CriticalSectionRawMutex, AlertLevel, 3>;
 type WifiSignal = Signal<CriticalSectionRawMutex, WifiState>;
 static BUZZER_SIGNAL: BuzzerSignal = Signal::new();
 static WIFI_SIGNAL: WifiSignal = Signal::new();
@@ -84,6 +88,16 @@ const fn _default_leds() -> usize {
 #[inline]
 const fn _empty_str() -> &'static str {
     ""
+}
+
+#[inline]
+const fn _cnc() -> &'static str {
+    "cnc"
+}
+
+#[inline]
+const fn _andon() -> &'static str {
+    "andon"
 }
 
 #[inline]
@@ -107,14 +121,14 @@ const fn _default_mqtt_port() -> u16 {
 }
 
 #[inline]
-fn device_id() -> heapless::String<12> {
+fn andon_id() -> heapless::String<32> {
     let mac = Efuse::read_base_mac_address();
-    let mut s = heapless::String::<12>::new();
-    // write!(s, "{:012X}", mac).unwrap();
-    for b in mac {
-        write!(s, "{:02X}", b).unwrap();
+    let mut id = heapless::String::<32>::new();
+    write!(id, "light-").unwrap();
+    for chunk in mac {
+        write!(id, "{:02X}", chunk).unwrap();
     }
-    s
+    id
 }
 
 type SpiBus = Mutex<NoopRawMutex, SpiDmaBus<'static, Async>>;
@@ -155,7 +169,7 @@ struct DeviceConfig {
     #[serde(default = "_default_version")]
     version: u32,
     #[serde(default = "_empty_str")]
-    device_id: &'static str,
+    id: &'static str,
     #[serde(default = "_default_true")]
     buzzer_enabled: bool,
     #[serde(default = "_default_leds")]
@@ -174,6 +188,12 @@ struct DeviceConfig {
     mqtt_username: &'static str,
     #[serde(default = "_empty_str")]
     mqtt_password: &'static str,
+    #[serde(default = "_cnc")]
+    mqtt_device_type: &'static str,
+    #[serde(default = "_andon")]
+    mqtt_topic_prefix: &'static str,
+    #[serde(default = "_empty_str")]
+    mqtt_topic: &'static str,
 }
 
 impl Default for DeviceConfig {
@@ -588,7 +608,7 @@ async fn main(spawner: Spawner) {
     // TODO: Need better support for filesystem and config errors
     let result = sd_reader.read_config("CONFIG.JSO", buffer).await;
 
-    let app_config = match result {
+    let mut app_config = match result {
         Ok(num_read) => {
             // For now only checking version, but in future it may be used to check compatibility
             match serde_json_core::de::from_slice::<VersionProbe>(&buffer[0..num_read]) {
@@ -619,6 +639,11 @@ async fn main(spawner: Spawner) {
         }
     };
 
+    if app_config.id.is_empty() {
+        static ID_BUFFER: StaticCell<heapless::String<32>> = StaticCell::new();
+        app_config.id = ID_BUFFER.init(andon_id());
+    }
+
     log::debug!("End of config read");
 
     log::debug!("Starting up leds control");
@@ -630,6 +655,7 @@ async fn main(spawner: Spawner) {
 
     static ANDON: StaticCell<DeviceAsyncMutex> = StaticCell::new();
 
+    // TODO: Figure it out to NOT clone settings here
     let device = ANDON.init(Mutex::new(Device::new(app_config.clone())));
     spawner
         .spawn(run_andon_light(spi_dev, device, led_reset))
@@ -691,15 +717,7 @@ async fn main(spawner: Spawner) {
 
         if !app_config.mqtt_host.is_empty() {
             spawner
-                .spawn(mqtt_publisher(
-                    device,
-                    stack,
-                    &WIFI_SIGNAL,
-                    app_config.mqtt_host,
-                    app_config.mqtt_port,
-                    app_config.mqtt_username,
-                    app_config.mqtt_password,
-                ))
+                .spawn(mqtt_publisher(device, stack, &WIFI_SIGNAL))
                 .ok();
         } else {
             log::info!("MQTT host is empty, skipping MQTT initialization");
@@ -769,17 +787,45 @@ async fn mqtt_publisher(
     device: &'static DeviceAsyncMutex,
     stack: embassy_net::Stack<'static>,
     wifi_signal: &'static WifiSignal,
-    mqtt_host: &'static str,
-    mqtt_port: u16,
-    mqtt_username: &'static str,
-    mqtt_password: &'static str,
 ) {
+    let mut root_topic = heapless::String::<100>::new();
+    let andon_id;
+    {
+        let andon = device.lock().await;
+        let cc = &andon.config;
+        andon_id = cc.id;
+        match (
+            cc.mqtt_topic,
+            cc.mqtt_topic_prefix,
+            cc.mqtt_device_type,
+            cc.id,
+        ) {
+            (topic, _, _, _) if !topic.is_empty() => {
+                write!(root_topic, "{}", topic).unwrap();
+            }
+            // Validation,
+            ("", _, "", _) | ("", _, _, "") => {
+                log::error!("MQTT topic parts are not properly configured, cannot proceed with MQTT publisher");
+                return;
+            }
+            // Prefix may be unset
+            ("", "", device_type, andon_id) => {
+                write!(root_topic, "{}/{}", device_type, andon_id).unwrap();
+            }
+            ("", prefix, device_type, andon_id) => {
+                write!(root_topic, "{}/{}/{}", prefix, device_type, andon_id).unwrap();
+            }
+            _ => {
+                log::error!("Unexpected MQTT configuration");
+                return;
+            }
+        }
+    }
+
     let mut current_state: WifiState;
-    let mut unique_id = heapless::String::<32>::new();
-    write!(unique_id, "light-{}", device_id()).unwrap();
-    let lwt_payload = generate_json_message(&unique_id, "offline");
-    let system_topic = generate_mqtt_topic(&unique_id, "system");
-    let device_topic = generate_mqtt_topic(&unique_id, "device");
+    let lwt_payload = generate_json_message(andon_id, "offline");
+    let connection_topic = generate_mqtt_topic(&root_topic, "connection");
+    let state_topic = generate_mqtt_topic(&root_topic, "state");
 
     loop {
         current_state = wifi_signal.wait().await;
@@ -798,93 +844,111 @@ async fn mqtt_publisher(
 
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
         socket.set_timeout(Some(embassy_time::Duration::from_secs(30)));
-        // Put logic here
-        let address = match stack
-            .dns_query(mqtt_host, DnsQueryType::A)
-            .await
-            .map(|a| a[0])
+        let mut config;
         {
-            Ok(address) => address,
-            Err(e) => {
-                log::debug!("DNS lookup error: {e:?}");
-                // TODO: Better backoff strategy
+            let andon = device.lock().await;
+            let address = match stack
+                .dns_query(andon.config.mqtt_host, DnsQueryType::A)
+                .await
+                .map(|a| a[0])
+            {
+                Ok(address) => address,
+                Err(e) => {
+                    log::error!("DNS lookup error: {e:?}");
+                    // TODO: Better backoff strategy
+                    continue;
+                }
+            };
+            let remote_endpoint = (address, andon.config.mqtt_port);
+            log::debug!("MQTT connecting to {remote_endpoint:?}...");
+            if let Err(e) = socket.connect(remote_endpoint).await {
+                log::error!("MQTT connect error: {:?}", e);
                 continue;
             }
-        };
-        let remote_endpoint = (address, mqtt_port);
-        log::debug!("MQTT connecting to {remote_endpoint:?}...");
-        if let Err(e) = socket.connect(remote_endpoint).await {
-            log::debug!("connect error: {:?}", e);
-            continue;
-        }
-        log::debug!("connected");
+            log::debug!("MQTT TCP connection established");
 
-        // TODO: Typology
-        let mut config: rust_mqtt::client::client_config::ClientConfig<'_, 5, CountingRng> =
-            rust_mqtt::client::client_config::ClientConfig::new(
-                rust_mqtt::client::client_config::MqttVersion::MQTTv5,
-                CountingRng(20000),
-            );
-        config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
-        config.add_client_id(&unique_id);
-        config.max_packet_size = 100;
-        config.keep_alive = 60;
-        config.add_will(&system_topic, lwt_payload.as_bytes(), false);
+            config = MqttClientConfig::<5, CountingRng>::new(MQTTv5, CountingRng(20000));
+            // TODO: Move some of these to consts
+            config.add_max_subscribe_qos(QoS1);
+            config.add_client_id(andon_id);
+            config.max_packet_size = 100;
+            config.keep_alive = 60;
+            config.add_will(&connection_topic, lwt_payload.as_bytes(), true);
 
-        if !mqtt_username.is_empty() && !mqtt_password.is_empty() {
-            log::debug!("Using MQTT username: {}", mqtt_username);
-            config.add_username(mqtt_username);
-            config.add_password(mqtt_password);
-        } else {
-            log::debug!("No MQTT username/password provided, connecting anonymously");
+            if !andon.config.mqtt_username.is_empty() && !andon.config.mqtt_password.is_empty() {
+                log::debug!("Using MQTT username: {}", andon.config.mqtt_username);
+                config.add_username(andon.config.mqtt_username);
+                config.add_password(andon.config.mqtt_password);
+            } else {
+                log::debug!("No MQTT username/password provided, connecting anonymously");
+            }
         }
 
         let mut writebuf = [0; 1024];
         let mut readbuf = [0; 1024];
+        // TODO: Bound properties to consts
         let mut client =
-            MqttClient::<_, 5, _>::new(socket, &mut writebuf, 160, &mut readbuf, 160, config);
+            MqttClient::<_, 5, _>::new(socket, &mut writebuf, 200, &mut readbuf, 200, config);
 
         match client.connect_to_broker().await {
             Ok(()) => {
-                log::debug!("Connected to broker");
+                log::info!("Connected to MQTT broker");
             }
             Err(mqtt_error) => {
                 if let ReasonCode::NetworkError = mqtt_error {
-                    log::debug!("MQTT Network Error");
+                    log::error!("MQTT Network Error");
                 } else {
-                    log::debug!("Other MQTT Error: {:?}", mqtt_error);
+                    log::error!("Other MQTT Error: {:?}", mqtt_error);
                 }
             }
         }
         // TODO: Handle all the unwraps
         client.send_ping().await.unwrap();
 
-        client
+        match client
             .send_message(
-                &system_topic,
-                generate_json_message(&unique_id, "online").as_bytes(),
+                &connection_topic,
+                generate_json_message(andon_id, "online").as_bytes(),
                 QoS1,
-                false,
+                // This must be retained message as well, otherise client will get "offline" on reconnect
+                true,
             )
             .await
-            .unwrap();
+        {
+            Ok(()) => {
+                log::trace!("MQTT message sent successfully");
+            }
+            Err(mqtt_error) => match mqtt_error {
+                // This actually means its fine, just nobody is listening
+                rust_mqtt::packet::v5::reason_codes::ReasonCode::NoMatchingSubscribers => {
+                    log::debug!("MQTT message sent successfully, but nobody is listening");
+                }
+                _ => {
+                    log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
+                    // TODO: is this the right approach?
+                    return;
+                }
+            },
+        }
 
         loop {
-            let state;
-            let codes;
+            let andon_state;
+            let error_codes;
             {
                 let device = device.lock().await;
-                state = device.andon_light.get_state();
-                codes = device.andon_light.get_codes();
+                andon_state = device.andon_light.get_state();
+                error_codes = device.andon_light.get_codes();
             }
             let mut codes_repr: heapless::String<100> = heapless::String::new();
             codes_repr.push_str("[").unwrap();
-            for (i, code) in codes.iter().enumerate() {
+            for (i, code) in error_codes.iter().enumerate() {
                 if i > 0 {
-                    // Add a comma separator between elements (but not before the first one)
                     codes_repr.push_str(",").unwrap();
                 }
-                codes_repr.push_str(code.as_str()).unwrap(); // Add each enum as a string
+                // Add each enum as a string
+                codes_repr.push_str("\"").unwrap();
+                codes_repr.push_str(code.as_str()).unwrap();
+                codes_repr.push_str("\"").unwrap();
             }
             codes_repr.push_str("]").unwrap();
 
@@ -892,43 +956,47 @@ async fn mqtt_publisher(
             write!(
                 message,
                 r#"{{"id": "{}", "device_state": "{}", "system_state": "{}", "codes": {}}}"#,
-                &unique_id,
-                state.0.as_str(),
-                state.1.as_str(),
+                &andon_id,
+                andon_state.0.as_str(),
+                andon_state.1.as_str(),
                 codes_repr
             )
             .unwrap();
             match client
-                .send_message(&device_topic, message.as_bytes(), QoS1, false)
+                .send_message(&state_topic, message.as_bytes(), QoS1, false)
                 .await
             {
                 Ok(()) => {
-                    log::debug!("MQTT message sent successfully");
+                    log::trace!("MQTT message sent successfully");
                 }
-                Err(mqtt_error) => {
-                    log::debug!("Failed to send MQTT message: {:?}", mqtt_error);
-                }
+                Err(mqtt_error) => match mqtt_error {
+                    // This actually means its fine, just nobody is listening
+                    rust_mqtt::packet::v5::reason_codes::ReasonCode::NoMatchingSubscribers => {
+                        log::debug!("MQTT message sent successfully, but nobody is listening");
+                    }
+                    _ => {
+                        log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
+                    }
+                },
             }
-            Timer::after(Duration::from_secs(20)).await;
+            // TODO: Make publish interval reasonable const
+            Timer::after(Duration::from_secs(2)).await;
         }
     }
 }
 
-pub fn generate_mqtt_topic(device_id: &heapless::String<32>, suffix: &str) -> heapless::String<40> {
-    let mut topic = heapless::String::<40>::new();
-    write!(topic, "andon/{}/{}", device_id, suffix).unwrap();
+pub fn generate_mqtt_topic(root_topic: &str, suffix: &str) -> heapless::String<60> {
+    let mut topic = heapless::String::<60>::new();
+    write!(topic, "{}/{}", root_topic, suffix).unwrap();
     topic
 }
 
-pub fn generate_json_message(
-    device_id: &heapless::String<32>,
-    status: &str,
-) -> heapless::String<70> {
+pub fn generate_json_message(andon_id: &str, status: &str) -> heapless::String<70> {
     let mut message = heapless::String::<70>::new();
     write!(
         message,
         r#"{{"status": "{}", "id": "{}"}}"#,
-        status, device_id
+        status, andon_id
     )
     .unwrap();
     message
