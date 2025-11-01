@@ -26,7 +26,7 @@ bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5
 critical-section = "1.2.0"
 embassy-executor = { version = "0.9.1", features = ["arch-riscv32", "log"] }
 embassy-time = { version = "0.5.0", features = ["generic-queue-8"] }
-heapless = { version = "^0.9", default-features = false }
+heapless = { version = "^0.9", default-features = false, features = ["serde"] }
 static_cell = { version = "2.1.1" }
 andon-light-core = { path = "../core/andon-light-core/" }
 andon-light-macros = { path = "../core/andon-light-macros/" }
@@ -46,7 +46,13 @@ esp-rtos = { version = "0.1.1", features = [
   "esp-alloc",
 ] }
 embassy-embedded-hal = "0.5.0"
-embassy-net = { version = "0.7.1", features = ["medium-ip", "proto-ipv4", "dhcpv4", "dns", "tcp"] }
+embassy-net = { version = "0.7.1", features = [
+  "medium-ip",
+  "proto-ipv4",
+  "dhcpv4",
+  "dns",
+  "tcp",
+] }
 esp-radio = { version = "0.16.0", features = ["esp32c3", "wifi", "unstable"] }
 rust-mqtt = { version = "0.3.0", default-features = false }
 

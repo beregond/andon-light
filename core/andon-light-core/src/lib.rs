@@ -222,7 +222,12 @@ fn collapse(system: &SystemState, device: &DeviceState) -> Pattern {
 pub trait ErrorCodesBase:
     Sized + core::fmt::Debug + Eq + PartialEq + core::hash::Hash + Copy
 {
+    // MIN_SET_SIZE is helper const that stores size of
+    // FnvIndexSet - as this number must be power of 2
     const MIN_SET_SIZE: usize;
+    // CODES_AMOUNT is helper const that stores max amount of error codes
+    // (not ok codes) - used for example to size heapless Vec for codes storage
+    const CODES_AMOUNT: usize;
 
     fn as_str(&self) -> &'static str;
     fn from_str(value: &str) -> Result<Self, &'static str>;

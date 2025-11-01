@@ -138,7 +138,7 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
     }
 
     if codes_amount < 1 {
-        panic!("ErrorCodes must have at least one variant, that is not above 'ok' level");
+        panic!("ErrorCodes must have at least one variant, that is not 'ok' level");
     }
 
     let mut min_size = next_power_of_2(codes_amount);
@@ -150,6 +150,7 @@ pub fn error_codes_derive(input: TokenStream) -> TokenStream {
     quote::quote! {
         impl andon_light_core::ErrorCodesBase for #ident {
             const MIN_SET_SIZE: usize = #min_size;
+            const CODES_AMOUNT: usize = #codes_amount;
 
             fn as_str(&self) -> &'static str {
                 match self {

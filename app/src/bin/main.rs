@@ -133,7 +133,7 @@ fn andon_id() -> heapless::String<32> {
 
 type SpiBus = Mutex<NoopRawMutex, SpiDmaBus<'static, Async>>;
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone, ErrorCodesEnum, Copy)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, ErrorCodesEnum, Copy, Serialize)]
 pub enum ErrorCodes {
     #[code(message = "Ok", level = "ok")]
     Ok,
@@ -450,6 +450,15 @@ async fn rgb_probe_task(
     log::debug!("RGB probe task started");
     let mut ticker = Ticker::every(Duration::from_millis(500));
     let mapper = ColorMapper::default();
+    let exclusive = Vec::<ErrorCodes, 6>::from_slice(&[
+        ErrorCodes::SE003,
+        ErrorCodes::E001,
+        ErrorCodes::E002,
+        ErrorCodes::E003,
+        ErrorCodes::I001,
+        ErrorCodes::W001,
+    ])
+    .unwrap();
     loop {
         'main: loop {
             match (
@@ -484,16 +493,6 @@ async fn rgb_probe_task(
                 // wait for measurement to be available
                 Timer::after(Duration::from_millis(10)).await;
             }
-
-            let exclusive = Vec::<ErrorCodes, 6>::from_slice(&[
-                ErrorCodes::SE003,
-                ErrorCodes::E001,
-                ErrorCodes::E002,
-                ErrorCodes::E003,
-                ErrorCodes::I001,
-                ErrorCodes::W001,
-            ])
-            .unwrap();
 
             'inner: loop {
                 match sensor.read_all_channels().await {
@@ -782,6 +781,20 @@ async fn connection(
     }
 }
 
+#[derive(Serialize)]
+struct MqttMessage<'a> {
+    id: &'a str,
+    device_state: &'a str,
+    system_state: &'a str,
+    codes: heapless::Vec<ErrorCodes, { ErrorCodes::CODES_AMOUNT }>,
+}
+
+#[derive(Serialize)]
+struct MqttStatusMessage<'a> {
+    id: &'a str,
+    status: &'a str,
+}
+
 #[embassy_executor::task]
 async fn mqtt_publisher(
     device: &'static DeviceAsyncMutex,
@@ -823,7 +836,12 @@ async fn mqtt_publisher(
     }
 
     let mut current_state: WifiState;
-    let lwt_payload = generate_json_message(andon_id, "offline");
+    let lwt_payload: serde_json_core::heapless::String<70> =
+        serde_json_core::to_string(&MqttStatusMessage {
+            id: andon_id,
+            status: "offline",
+        })
+        .unwrap();
     let connection_topic = generate_mqtt_topic(&root_topic, "connection");
     let state_topic = generate_mqtt_topic(&root_topic, "state");
 
@@ -892,7 +910,7 @@ async fn mqtt_publisher(
 
         match client.connect_to_broker().await {
             Ok(()) => {
-                log::info!("Connected to MQTT broker");
+                log::info!("Connected to MQTT broker, starting publishing messages");
             }
             Err(mqtt_error) => {
                 if let ReasonCode::NetworkError = mqtt_error {
@@ -905,10 +923,17 @@ async fn mqtt_publisher(
         // TODO: Handle all the unwraps
         client.send_ping().await.unwrap();
 
+        let message: serde_json_core::heapless::String<70> =
+            serde_json_core::to_string(&MqttStatusMessage {
+                id: andon_id,
+                status: "online",
+            })
+            .unwrap();
+
         match client
             .send_message(
                 &connection_topic,
-                generate_json_message(andon_id, "online").as_bytes(),
+                message.as_bytes(),
                 QoS1,
                 // This must be retained message as well, otherise client will get "offline" on reconnect
                 true,
@@ -939,29 +964,16 @@ async fn mqtt_publisher(
                 andon_state = device.andon_light.get_state();
                 error_codes = device.andon_light.get_codes();
             }
-            let mut codes_repr: heapless::String<100> = heapless::String::new();
-            codes_repr.push_str("[").unwrap();
-            for (i, code) in error_codes.iter().enumerate() {
-                if i > 0 {
-                    codes_repr.push_str(",").unwrap();
-                }
-                // Add each enum as a string
-                codes_repr.push_str("\"").unwrap();
-                codes_repr.push_str(code.as_str()).unwrap();
-                codes_repr.push_str("\"").unwrap();
-            }
-            codes_repr.push_str("]").unwrap();
+            let message = MqttMessage {
+                id: andon_id,
+                device_state: andon_state.0.as_str(),
+                system_state: andon_state.1.as_str(),
+                codes: error_codes,
+            };
 
-            let mut message = heapless::String::<150>::new();
-            write!(
-                message,
-                r#"{{"id": "{}", "device_state": "{}", "system_state": "{}", "codes": {}}}"#,
-                &andon_id,
-                andon_state.0.as_str(),
-                andon_state.1.as_str(),
-                codes_repr
-            )
-            .unwrap();
+            // TODO: Can I get rid of size notation?
+            let message: serde_json_core::heapless::String<100> =
+                serde_json_core::to_string(&message).unwrap();
             match client
                 .send_message(&state_topic, message.as_bytes(), QoS1, false)
                 .await
@@ -989,15 +1001,4 @@ pub fn generate_mqtt_topic(root_topic: &str, suffix: &str) -> heapless::String<6
     let mut topic = heapless::String::<60>::new();
     write!(topic, "{}/{}", root_topic, suffix).unwrap();
     topic
-}
-
-pub fn generate_json_message(andon_id: &str, status: &str) -> heapless::String<70> {
-    let mut message = heapless::String::<70>::new();
-    write!(
-        message,
-        r#"{{"status": "{}", "id": "{}"}}"#,
-        status, andon_id
-    )
-    .unwrap();
-    message
 }
