@@ -140,7 +140,7 @@ static PATTERN_SYSTEM_ERROR: Pattern = [OFF, MAGENTA, OFF, OFF];
 // - when both system and device are in error state
 static PATTERN_FATAL_ERROR: Pattern = [OFF, MAGENTA, OFF, RED];
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum DeviceState {
     Ok,    // I don't have to do anything, the system is running
     Idle,  // the system is idle, I may have to do something, but I don't have to do it now
@@ -159,7 +159,7 @@ impl DeviceState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum SystemState {
     Ok,    // Everything is ok
     Warn,  // There is minor problem, that does not prevent the system from working
@@ -451,6 +451,16 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
             vec.push(*code).unwrap();
         }
         vec
+    }
+
+    pub fn get_report(&self) -> (SystemState, DeviceState, AlertLevel, heapless::Vec<T, U>) {
+        let codes = self.get_codes();
+        (
+            self.state.0.clone(),
+            self.state.1.clone(),
+            self.calculate_alert_level(),
+            codes,
+        )
     }
 }
 

@@ -55,6 +55,7 @@ embassy-net = { version = "0.7.1", features = [
 ] }
 esp-radio = { version = "0.16.0", features = ["esp32c3", "wifi", "unstable"] }
 rust-mqtt = { version = "0.3.0", default-features = false }
+embassy-futures = "0.1.2"
 
 [build-dependencies]
 vergen-gix = { version = "1.0.9", features = ["build"] }

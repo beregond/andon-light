@@ -5,7 +5,7 @@ use andon_light::*;
 
 use andon_light_core::{
     colors::{Color, ColorMapper},
-    AlertLevel, ErrorCodesBase,
+    AlertLevel, DeviceState, ErrorCodesBase, SystemState,
 };
 use andon_light_macros::{default_from_env, ErrorCodesEnum};
 use core::fmt::Write;
@@ -52,7 +52,7 @@ use static_cell::StaticCell;
 use tcs3472::Tcs3472;
 extern crate alloc;
 use embassy_sync::signal::Signal;
-use embassy_sync::watch::Watch;
+use embassy_sync::watch::{Receiver, Sender, Watch};
 use rust_mqtt::{
     client::client::MqttClient,
     client::client_config::{ClientConfig as MqttClientConfig, MqttVersion::MQTTv5},
@@ -73,11 +73,7 @@ pub enum WifiState {
 }
 
 type BuzzerSignal = Signal<CriticalSectionRawMutex, AlertLevel>;
-type AndonNotifier = Watch<CriticalSectionRawMutex, AlertLevel, 3>;
-type AndonWatch = Watch<CriticalSectionRawMutex, AlertLevel, 3>;
-type WifiSignal = Signal<CriticalSectionRawMutex, WifiState>;
 static BUZZER_SIGNAL: BuzzerSignal = Signal::new();
-static WIFI_SIGNAL: WifiSignal = Signal::new();
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 const DEFAULT_LEDS_AMOUNT: usize = default_from_env!(DEFAULT_LEDS_AMOUNT, 16);
@@ -161,6 +157,31 @@ pub enum ErrorCodes {
 
 type AndonLight =
     andon_light_core::AndonLight<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }, MAX_SUPPORTED_LEDS>;
+
+// NOTE: this must be declared here for now, as IAT are in progress,
+// check https://github.com/rust-lang/rust/issues/8995
+type AndonReport = (
+    SystemState,
+    DeviceState,
+    AlertLevel,
+    heapless::Vec<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }>,
+);
+
+const ANDON_REPORT_CHANNELS: usize = 3;
+type AndonNotifier = Watch<CriticalSectionRawMutex, bool, ANDON_REPORT_CHANNELS>;
+type AndonReporter = Watch<CriticalSectionRawMutex, AndonReport, ANDON_REPORT_CHANNELS>;
+type WifiSignal = Signal<CriticalSectionRawMutex, WifiState>;
+static ANDON_NOTIFIER: AndonNotifier = Watch::new();
+static ANDON_REPORTER: AndonReporter = Watch::new();
+static WIFI_SIGNAL: WifiSignal = Signal::new();
+
+type AndonNotifierSender = Sender<'static, CriticalSectionRawMutex, bool, ANDON_REPORT_CHANNELS>;
+type AndonNotifierReceiver =
+    Receiver<'static, CriticalSectionRawMutex, bool, ANDON_REPORT_CHANNELS>;
+type AndonReporterSender =
+    Sender<'static, CriticalSectionRawMutex, AndonReport, ANDON_REPORT_CHANNELS>;
+type AndonReporterReceiver =
+    Receiver<'static, CriticalSectionRawMutex, AndonReport, ANDON_REPORT_CHANNELS>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VersionProbe {
@@ -322,6 +343,35 @@ async fn buzzer_supervisor(device: &'static DeviceAsyncMutex, sender: &'static B
         if current_level != alert_level {
             current_level = alert_level;
             sender.signal(alert_level);
+        }
+        ticker.next().await;
+    }
+}
+
+/// Checks for alert level changes and signals to other peripherals,
+/// so they can react accordingly
+#[embassy_executor::task]
+async fn andon_supervisor(
+    device: &'static DeviceAsyncMutex,
+    notifier: AndonNotifierSender,
+    reporter: AndonReporterSender,
+) {
+    let mut ticker = Ticker::every(Duration::from_millis(500));
+    let mut current_report;
+    {
+        let device = device.lock().await;
+        current_report = device.andon_light.get_report()
+    }
+    loop {
+        let report;
+        {
+            let device = device.lock().await;
+            report = device.andon_light.get_report();
+        }
+        if current_report != report {
+            reporter.send(report.clone());
+            notifier.send(true);
+            current_report = report;
         }
         ticker.next().await;
     }
@@ -650,6 +700,7 @@ async fn main(spawner: Spawner) {
     }
 
     log::debug!("End of config read");
+    log::info!("Andon light ID: {}", app_config.id);
 
     log::debug!("Starting up leds control");
 
@@ -667,6 +718,12 @@ async fn main(spawner: Spawner) {
         .unwrap();
 
     log::debug!("Leds started");
+
+    let notifier = ANDON_NOTIFIER.sender();
+    let reporter = ANDON_REPORTER.sender();
+    spawner
+        .spawn(andon_supervisor(device, notifier, reporter))
+        .unwrap();
 
     // Buzzer
     spawner
@@ -722,7 +779,13 @@ async fn main(spawner: Spawner) {
 
         if !app_config.mqtt_host.is_empty() {
             spawner
-                .spawn(mqtt_publisher(device, stack, &WIFI_SIGNAL))
+                .spawn(mqtt_publisher(
+                    device,
+                    stack,
+                    &WIFI_SIGNAL,
+                    ANDON_NOTIFIER.receiver().unwrap(),
+                    ANDON_REPORTER.receiver().unwrap(),
+                ))
                 .ok();
         } else {
             log::info!("MQTT host is empty, skipping MQTT initialization");
@@ -807,6 +870,8 @@ async fn mqtt_publisher(
     device: &'static DeviceAsyncMutex,
     stack: embassy_net::Stack<'static>,
     wifi_signal: &'static WifiSignal,
+    mut andon_notifier: AndonNotifierReceiver,
+    mut andon_reporter: AndonReporterReceiver,
 ) {
     let mut root_topic = heapless::String::<100>::new();
     let andon_id;
@@ -965,43 +1030,83 @@ async fn mqtt_publisher(
             },
         }
 
-        loop {
-            let andon_state;
-            let error_codes;
-            {
+        // TODO: So much duplication with below, refactor
+        let andon_state;
+        let error_codes;
+        match andon_reporter.try_changed() {
+            Some(report) => {
+                andon_state = (report.0, report.1);
+                error_codes = report.3;
+            }
+            None => {
                 let device = device.lock().await;
                 andon_state = device.andon_light.get_state();
                 error_codes = device.andon_light.get_codes();
             }
-            let message = MqttMessage {
-                id: andon_id,
-                device_state: andon_state.0.as_str(),
-                system_state: andon_state.1.as_str(),
-                codes: error_codes,
-            };
+        }
 
-            // TODO: Can I get rid of size notation?
-            let message: serde_json_core::heapless::String<100> =
-                serde_json_core::to_string(&message).unwrap();
-            match client
-                .send_message(&state_topic, message.as_bytes(), QoS1, false)
-                .await
-            {
-                Ok(()) => {
-                    log::trace!("MQTT message sent successfully");
-                }
-                Err(mqtt_error) => match mqtt_error {
-                    // This actually means its fine, just nobody is listening
-                    rust_mqtt::packet::v5::reason_codes::ReasonCode::NoMatchingSubscribers => {
-                        log::debug!("MQTT message sent successfully, but nobody is listening");
-                    }
-                    _ => {
-                        log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
-                    }
-                },
+        let first_message = MqttMessage {
+            id: andon_id,
+            device_state: andon_state.0.as_str(),
+            system_state: andon_state.1.as_str(),
+            codes: error_codes,
+        };
+        // TODO: Can I get rid of size notation?
+        let payload: serde_json_core::heapless::String<100> =
+            serde_json_core::to_string(&first_message).unwrap();
+        match client
+            .send_message(&state_topic, payload.as_bytes(), QoS1, true)
+            .await
+        {
+            Ok(()) => {
+                log::trace!("MQTT message sent successfully");
             }
-            // TODO: Make publish interval reasonable const
-            Timer::after(Duration::from_secs(2)).await;
+            Err(mqtt_error) => match mqtt_error {
+                // This actually means its fine, just nobody is listening
+                rust_mqtt::packet::v5::reason_codes::ReasonCode::NoMatchingSubscribers => {
+                    log::debug!("MQTT message sent successfully, but nobody is listening");
+                }
+                _ => {
+                    log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
+                }
+            },
+        }
+
+        loop {
+            let timer = Timer::after(Duration::from_secs(30));
+            embassy_futures::select::select(timer, andon_notifier.changed()).await;
+            match andon_reporter.try_changed() {
+                Some(report) => {
+                    let message = MqttMessage {
+                        id: andon_id,
+                        device_state: report.0.as_str(),
+                        system_state: report.1.as_str(),
+                        codes: report.3,
+                    };
+                    let another_payload: serde_json_core::heapless::String<100> =
+                        serde_json_core::to_string(&message).unwrap();
+                    match client
+                        .send_message(&state_topic, another_payload.as_bytes(), QoS1, true)
+                        .await
+                    {
+                        Ok(()) => {
+                            log::trace!("MQTT message sent successfully");
+                        }
+                        Err(mqtt_error) => match mqtt_error {
+                            // This actually means its fine, just nobody is listening
+                            rust_mqtt::packet::v5::reason_codes::ReasonCode::NoMatchingSubscribers => {
+                                log::debug!("MQTT message sent successfully, but nobody is listening");
+                            }
+                            _ => {
+                                log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
+                            }
+                        },
+                    }
+                }
+                None => {
+                    client.send_ping().await.unwrap();
+                }
+            }
         }
     }
 }
