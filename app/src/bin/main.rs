@@ -62,6 +62,10 @@ use rust_mqtt::{
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const BUILD_VERSION: &str = env!("VERGEN_GIT_DESCRIBE");
+const BUILD_TIME: &str = env!("VERGEN_BUILD_TIMESTAMP");
+
 #[derive(Debug)]
 pub enum WifiState {
     Disconnected,
@@ -147,7 +151,7 @@ pub enum ErrorCodes {
     SE002,
     #[code(message = "TCS sensor error", level = "system_error")]
     SE003,
-    #[code(message = "Device report error", level = "error")]
+    #[code(message = "Device reported error", level = "error")]
     E001,
     #[code(message = "No data from device", level = "error")]
     E002,
@@ -545,6 +549,8 @@ async fn net_task(mut runner: embassy_net::Runner<'static, WifiDevice<'static>>)
 async fn main(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
     log::info!("Hello world!");
+    log::info!("Andon Light firmware version: {}", BUILD_VERSION);
+    log::info!("Build timestamp: {}", BUILD_TIME);
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
@@ -793,6 +799,7 @@ struct MqttMessage<'a> {
 struct MqttStatusMessage<'a> {
     id: &'a str,
     status: &'a str,
+    version: Option<&'a str>,
 }
 
 #[embassy_executor::task]
@@ -840,6 +847,7 @@ async fn mqtt_publisher(
         serde_json_core::to_string(&MqttStatusMessage {
             id: andon_id,
             status: "offline",
+            version: None,
         })
         .unwrap();
     let connection_topic = generate_mqtt_topic(&root_topic, "connection");
@@ -923,10 +931,11 @@ async fn mqtt_publisher(
         // TODO: Handle all the unwraps
         client.send_ping().await.unwrap();
 
-        let message: serde_json_core::heapless::String<70> =
+        let message: serde_json_core::heapless::String<100> =
             serde_json_core::to_string(&MqttStatusMessage {
                 id: andon_id,
                 status: "online",
+                version: Some(VERSION),
             })
             .unwrap();
 

@@ -1,9 +1,25 @@
+use vergen_gix::{BuildBuilder, Emitter, GixBuilder};
+
 fn main() {
     linker_be_nice();
     // make sure linkall.x is the last linker script (otherwise might cause problems with flip-link)
     println!("cargo:rustc-link-arg=-Tlinkall.x");
+
     println!("cargo:rerun-if-changed=$DEFAULT_LEDS_AMOUNT");
     println!("cargo:rerun-if-changed=$MAX_SUPPORTED_LEDS");
+
+    // This will automatically run `git describe` and set several env vars
+    Emitter::default().emit().unwrap();
+    let build = BuildBuilder::all_build().unwrap();
+    let gitcl = GixBuilder::all_git().unwrap();
+
+    Emitter::default()
+        .add_instructions(&build)
+        .unwrap()
+        .add_instructions(&gitcl)
+        .unwrap()
+        .emit()
+        .unwrap();
 }
 
 fn linker_be_nice() {

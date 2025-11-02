@@ -56,6 +56,9 @@ embassy-net = { version = "0.7.1", features = [
 esp-radio = { version = "0.16.0", features = ["esp32c3", "wifi", "unstable"] }
 rust-mqtt = { version = "0.3.0", default-features = false }
 
+[build-dependencies]
+vergen-gix = { version = "1.0.9", features = ["build"] }
+
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization
