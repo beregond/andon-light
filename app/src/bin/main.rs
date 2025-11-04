@@ -11,6 +11,7 @@ use andon_light_macros::{default_from_env, ErrorCodesEnum};
 use core::fmt::Write;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
+use embassy_futures::select::select;
 use embassy_net::{dns::DnsQueryType, tcp::TcpSocket};
 use embassy_sync::{
     blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex},
@@ -71,9 +72,6 @@ pub enum WifiState {
     Disconnected,
     Connected,
 }
-
-type BuzzerSignal = Signal<CriticalSectionRawMutex, AlertLevel>;
-static BUZZER_SIGNAL: BuzzerSignal = Signal::new();
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
 const DEFAULT_LEDS_AMOUNT: usize = default_from_env!(DEFAULT_LEDS_AMOUNT, 16);
@@ -167,21 +165,25 @@ type AndonReport = (
     heapless::Vec<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }>,
 );
 
-const ANDON_REPORT_CHANNELS: usize = 3;
-type AndonNotifier = Watch<CriticalSectionRawMutex, bool, ANDON_REPORT_CHANNELS>;
+// One for buzzer, one for mqtt
+const ANDON_REPORT_CHANNELS: usize = 2;
 type AndonReporter = Watch<CriticalSectionRawMutex, AndonReport, ANDON_REPORT_CHANNELS>;
-type WifiSignal = Signal<CriticalSectionRawMutex, WifiState>;
-static ANDON_NOTIFIER: AndonNotifier = Watch::new();
-static ANDON_REPORTER: AndonReporter = Watch::new();
-static WIFI_SIGNAL: WifiSignal = Signal::new();
-
-type AndonNotifierSender = Sender<'static, CriticalSectionRawMutex, bool, ANDON_REPORT_CHANNELS>;
-type AndonNotifierReceiver =
-    Receiver<'static, CriticalSectionRawMutex, bool, ANDON_REPORT_CHANNELS>;
 type AndonReporterSender =
     Sender<'static, CriticalSectionRawMutex, AndonReport, ANDON_REPORT_CHANNELS>;
 type AndonReporterReceiver =
     Receiver<'static, CriticalSectionRawMutex, AndonReport, ANDON_REPORT_CHANNELS>;
+
+// Onef for anon light runner, one for buzzer, one for mqtt
+const ANDON_NOTIFIER_CHANNELS: usize = 3;
+type AndonNotifier = Watch<CriticalSectionRawMutex, bool, ANDON_NOTIFIER_CHANNELS>;
+type AndonNotifierSender = Sender<'static, CriticalSectionRawMutex, bool, ANDON_NOTIFIER_CHANNELS>;
+type AndonNotifierReceiver =
+    Receiver<'static, CriticalSectionRawMutex, bool, ANDON_NOTIFIER_CHANNELS>;
+
+type WifiSignal = Signal<CriticalSectionRawMutex, WifiState>;
+static ANDON_NOTIFIER: AndonNotifier = Watch::new();
+static ANDON_REPORTER: AndonReporter = Watch::new();
+static WIFI_SIGNAL: WifiSignal = Signal::new();
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VersionProbe {
@@ -255,6 +257,7 @@ async fn run_andon_light(
     mut spi: SpiDevice<'static, NoopRawMutex, SpiDmaBus<'static, Async>, Output<'static>>,
     device: &'static DeviceAsyncMutex,
     mut led_reset: Output<'static>,
+    mut andon_notifier: AndonNotifierReceiver,
 ) {
     log::debug!("Resetting leds");
     led_reset.set_high();
@@ -278,13 +281,17 @@ async fn run_andon_light(
 
     log::debug!("Entering regular leds cycle");
     loop {
+        select(
+            Timer::after(Duration::from_secs(10)),
+            andon_notifier.changed(),
+        )
+        .await;
         let pattern;
         {
             let mut device = device.lock().await;
             pattern = device.andon_light.generate_signal();
         }
         spi.write(pattern.as_slice()).await.unwrap();
-        Timer::after(Duration::from_millis(pause)).await;
     }
 }
 
@@ -317,34 +324,6 @@ async fn heartbeat(
         Timer::after(Duration::from_millis(100)).await;
         channel.start_duty_fade(10, 30, 100).unwrap();
         Timer::after(Duration::from_millis(800)).await;
-    }
-}
-
-/// Checks for alert level changes and signals buzzer task if needed,
-/// so buzzer task does not need to lock device mutex all the time, in between notes
-#[embassy_executor::task]
-async fn buzzer_supervisor(device: &'static DeviceAsyncMutex, sender: &'static BuzzerSignal) {
-    let mut ticker = Ticker::every(Duration::from_millis(500));
-    let mut current_level;
-    {
-        let device = device.lock().await;
-        if !device.config.buzzer_enabled {
-            log::debug!("Buzzer is disabled, exiting supervisor task");
-            return;
-        }
-        current_level = device.andon_light.calculate_alert_level();
-    }
-    loop {
-        let alert_level;
-        {
-            let device = device.lock().await;
-            alert_level = device.andon_light.calculate_alert_level();
-        }
-        if current_level != alert_level {
-            current_level = alert_level;
-            sender.signal(alert_level);
-        }
-        ticker.next().await;
     }
 }
 
@@ -382,7 +361,8 @@ async fn buzzer(
     mut buzzer_pin: GPIO3<'static>,
     ledc: Ledc<'static>,
     device: &'static DeviceAsyncMutex,
-    signal: &'static BuzzerSignal,
+    mut andon_notifier: AndonNotifierReceiver,
+    mut andon_reporter: AndonReporterReceiver,
 ) {
     {
         let device = device.lock().await;
@@ -448,35 +428,43 @@ async fn buzzer(
                     for _ in 0..note.1 {
                         Timer::after(Duration::from_millis(100)).await;
                         // 'is_some' points to the fact that we are NOT in startup tune
-                        // There is funny egdg case when this task and supervisor starts at the
+                        // (only after test tune this variable will be set)
+                        // There is funny egde case when this task and supervisor starts at the
                         // same time and reads urgent level at the "same" time, because
                         // you will end up in playing longer beep after startup tune.
                         // To avoid it - only check for new signal after at leas one 'silent'
                         // note,so the sound will not compile in longer beep (thats wy we check
                         // note.0 == " ")
-                        if last_level.is_some() && note.0 == " " {
-                            let value = signal.try_take();
-                            if value.is_some() {
-                                // Since supervisor tracks changes, we can just switch to new level
-                                // without checking what was the last one
-                                switch_to_alert_level = value;
-                                break 'melody;
+                        // Additionally we check if level is different, again because of race
+                        // condition
+                        if note.0 == " " {
+                            if let Some(level) = last_level {
+                                if andon_notifier.try_changed().is_some() {
+                                    if let Some(report) = andon_reporter.try_changed() {
+                                        if report.2 != level {
+                                            switch_to_alert_level = Some(report.2);
+                                            break 'melody;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        let alert_level;
-        if let Some(level) = switch_to_alert_level {
-            alert_level = level;
-            switch_to_alert_level = None;
-        } else {
-            // Since we have alert level from supervisor - this situation should not happen,
-            // unless after startup tune - so it is justified to waif for device lock.
-            let device = device.lock().await;
-            alert_level = device.andon_light.calculate_alert_level();
-        }
+        let alert_level = match (switch_to_alert_level, andon_reporter.try_changed()) {
+            (Some(level), Some(_)) | (Some(level), None) => level,
+            (None, Some(report)) => {
+                // Preemptive drain
+                andon_notifier.try_changed();
+                report.2
+            }
+            (None, None) => {
+                let device = device.lock().await;
+                device.andon_light.calculate_alert_level()
+            }
+        };
         match alert_level {
             AlertLevel::Chill => {
                 tune = &chill_tune;
@@ -492,7 +480,6 @@ async fn buzzer(
             }
         }
         last_level = Some(alert_level);
-        // TODO: There is bug after update of esp-hal, when going into idle mode gives two notes in the beginning
     }
 }
 
@@ -711,27 +698,34 @@ async fn main(spawner: Spawner) {
 
     static ANDON: StaticCell<DeviceAsyncMutex> = StaticCell::new();
 
+    let notifier = ANDON_NOTIFIER.sender();
+    let reporter = ANDON_REPORTER.sender();
     // TODO: Figure it out to NOT clone settings here
     let device = ANDON.init(Mutex::new(Device::new(app_config.clone())));
     spawner
-        .spawn(run_andon_light(spi_dev, device, led_reset))
+        .spawn(run_andon_light(
+            spi_dev,
+            device,
+            led_reset,
+            ANDON_NOTIFIER.receiver().unwrap(),
+        ))
         .unwrap();
 
     log::debug!("Leds started");
 
-    let notifier = ANDON_NOTIFIER.sender();
-    let reporter = ANDON_REPORTER.sender();
     spawner
         .spawn(andon_supervisor(device, notifier, reporter))
         .unwrap();
 
-    // Buzzer
-    spawner
-        .spawn(buzzer_supervisor(device, &BUZZER_SIGNAL))
-        .unwrap();
     let buzzer_pin = peripherals.GPIO3;
     spawner
-        .spawn(buzzer(buzzer_pin, ledc, device, &BUZZER_SIGNAL))
+        .spawn(buzzer(
+            buzzer_pin,
+            ledc,
+            device,
+            ANDON_NOTIFIER.receiver().unwrap(),
+            ANDON_REPORTER.receiver().unwrap(),
+        ))
         .unwrap();
 
     let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
@@ -918,174 +912,182 @@ async fn mqtt_publisher(
     let connection_topic = generate_mqtt_topic(&root_topic, "connection");
     let state_topic = generate_mqtt_topic(&root_topic, "state");
 
-    loop {
-        current_state = wifi_signal.wait().await;
-        match current_state {
-            WifiState::Connected => {
-                log::debug!("MQTT publisher detected WiFi connected, starting MQTT client...");
-            }
-            WifiState::Disconnected => {
-                log::debug!("MQTT publisher detected WiFi disconnected, waiting...");
-                continue;
+    'main: loop {
+        loop {
+            current_state = wifi_signal.wait().await;
+            match current_state {
+                WifiState::Connected => {
+                    log::debug!("MQTT publisher detected WiFi connected, starting MQTT client...");
+                    break;
+                }
+                WifiState::Disconnected => {
+                    log::debug!("MQTT publisher detected WiFi disconnected, waiting...");
+                }
             }
         }
 
-        let mut rx_buffer = [0; 4096];
-        let mut tx_buffer = [0; 4096];
+        'connection: loop {
+            if matches!(wifi_signal.try_take(), Some(WifiState::Disconnected)) {
+                log::debug!(
+                    "MQTT publisher detected WiFi disconnected, dropping MQTT connection if any..."
+                );
+                continue 'main;
+            }
+            let mut rx_buffer = [0; 4096];
+            let mut tx_buffer = [0; 4096];
 
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(embassy_time::Duration::from_secs(30)));
-        let mut config;
-        {
-            let andon = device.lock().await;
-            let address = match stack
-                .dns_query(andon.config.mqtt_host, DnsQueryType::A)
-                .await
-                .map(|a| a[0])
+            let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+            socket.set_timeout(Some(embassy_time::Duration::from_secs(30)));
+            let mut config;
             {
-                Ok(address) => address,
-                Err(e) => {
-                    log::error!("DNS lookup error: {e:?}");
-                    // TODO: Better backoff strategy
+                let andon = device.lock().await;
+                let address = match stack
+                    .dns_query(andon.config.mqtt_host, DnsQueryType::A)
+                    .await
+                    .map(|a| a[0])
+                {
+                    Ok(address) => address,
+                    Err(e) => {
+                        log::error!("DNS lookup error: {e:?}");
+                        // TODO: Better backoff strategy
+                        continue;
+                    }
+                };
+                let remote_endpoint = (address, andon.config.mqtt_port);
+                log::debug!("MQTT connecting to {remote_endpoint:?}...");
+                if let Err(e) = socket.connect(remote_endpoint).await {
+                    log::error!("MQTT connect error: {:?}", e);
                     continue;
                 }
-            };
-            let remote_endpoint = (address, andon.config.mqtt_port);
-            log::debug!("MQTT connecting to {remote_endpoint:?}...");
-            if let Err(e) = socket.connect(remote_endpoint).await {
-                log::error!("MQTT connect error: {:?}", e);
-                continue;
-            }
-            log::debug!("MQTT TCP connection established");
+                log::debug!("MQTT TCP connection established");
 
-            config = MqttClientConfig::<5, CountingRng>::new(MQTTv5, CountingRng(20000));
-            // TODO: Move some of these to consts
-            config.add_max_subscribe_qos(QoS1);
-            config.add_client_id(andon_id);
-            config.max_packet_size = 100;
-            config.keep_alive = 60;
-            config.add_will(&connection_topic, lwt_payload.as_bytes(), true);
+                config = MqttClientConfig::<5, CountingRng>::new(MQTTv5, CountingRng(20000));
+                // TODO: Move some of these to consts
+                config.add_max_subscribe_qos(QoS1);
+                config.add_client_id(andon_id);
+                config.max_packet_size = 100;
+                config.keep_alive = 60;
+                config.add_will(&connection_topic, lwt_payload.as_bytes(), true);
 
-            if !andon.config.mqtt_username.is_empty() && !andon.config.mqtt_password.is_empty() {
-                log::debug!("Using MQTT username: {}", andon.config.mqtt_username);
-                config.add_username(andon.config.mqtt_username);
-                config.add_password(andon.config.mqtt_password);
-            } else {
-                log::debug!("No MQTT username/password provided, connecting anonymously");
-            }
-        }
-
-        let mut writebuf = [0; 1024];
-        let mut readbuf = [0; 1024];
-        // TODO: Bound properties to consts
-        let mut client =
-            MqttClient::<_, 5, _>::new(socket, &mut writebuf, 200, &mut readbuf, 200, config);
-
-        match client.connect_to_broker().await {
-            Ok(()) => {
-                log::info!("Connected to MQTT broker, starting publishing messages");
-            }
-            Err(mqtt_error) => {
-                if let ReasonCode::NetworkError = mqtt_error {
-                    log::error!("MQTT Network Error");
+                if !andon.config.mqtt_username.is_empty() && !andon.config.mqtt_password.is_empty()
+                {
+                    log::debug!("Using MQTT username: {}", andon.config.mqtt_username);
+                    config.add_username(andon.config.mqtt_username);
+                    config.add_password(andon.config.mqtt_password);
                 } else {
-                    log::error!("Other MQTT Error: {:?}", mqtt_error);
+                    log::debug!("No MQTT username/password provided, connecting anonymously");
                 }
             }
-        }
-        // TODO: Handle all the unwraps
-        client.send_ping().await.unwrap();
 
-        let message: serde_json_core::heapless::String<100> =
-            serde_json_core::to_string(&MqttStatusMessage {
-                id: andon_id,
-                status: "online",
-                version: Some(VERSION),
-            })
-            .unwrap();
+            let mut writebuf = [0; 1024];
+            let mut readbuf = [0; 1024];
+            // TODO: Bound properties to consts
+            let mut client =
+                MqttClient::<_, 5, _>::new(socket, &mut writebuf, 200, &mut readbuf, 200, config);
 
-        match client
-            .send_message(
-                &connection_topic,
-                message.as_bytes(),
-                QoS1,
-                // This must be retained message as well, otherise client will get "offline" on reconnect
-                true,
-            )
-            .await
-        {
-            Ok(()) => {
-                log::trace!("MQTT message sent successfully");
-            }
-            Err(mqtt_error) => match mqtt_error {
-                // This actually means its fine, just nobody is listening
-                rust_mqtt::packet::v5::reason_codes::ReasonCode::NoMatchingSubscribers => {
-                    log::debug!("MQTT message sent successfully, but nobody is listening");
+            match client.connect_to_broker().await {
+                Ok(()) => {
+                    log::info!("Connected to MQTT broker, starting publishing messages");
                 }
-                _ => {
-                    log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
-                    // TODO: is this the right approach?
-                    return;
+                Err(mqtt_error) => {
+                    if let ReasonCode::NetworkError = mqtt_error {
+                        log::error!("MQTT Network Error");
+                    } else {
+                        log::error!("Other MQTT Error: {:?}", mqtt_error);
+                    }
                 }
-            },
-        }
+            }
 
-        // TODO: So much duplication with below, refactor
-        let andon_state;
-        let error_codes;
-        match andon_reporter.try_changed() {
-            Some(report) => {
-                andon_state = (report.0, report.1);
-                error_codes = report.3;
-            }
-            None => {
-                let device = device.lock().await;
-                andon_state = device.andon_light.get_state();
-                error_codes = device.andon_light.get_codes();
-            }
-        }
+            let message: serde_json_core::heapless::String<100> =
+                serde_json_core::to_string(&MqttStatusMessage {
+                    id: andon_id,
+                    status: "online",
+                    version: Some(VERSION),
+                })
+                .unwrap();
 
-        let first_message = MqttMessage {
-            id: andon_id,
-            device_state: andon_state.0.as_str(),
-            system_state: andon_state.1.as_str(),
-            codes: error_codes,
-        };
-        // TODO: Can I get rid of size notation?
-        let payload: serde_json_core::heapless::String<100> =
-            serde_json_core::to_string(&first_message).unwrap();
-        match client
-            .send_message(&state_topic, payload.as_bytes(), QoS1, true)
-            .await
-        {
-            Ok(()) => {
-                log::trace!("MQTT message sent successfully");
-            }
-            Err(mqtt_error) => match mqtt_error {
-                // This actually means its fine, just nobody is listening
-                rust_mqtt::packet::v5::reason_codes::ReasonCode::NoMatchingSubscribers => {
-                    log::debug!("MQTT message sent successfully, but nobody is listening");
+            match client
+                .send_message(
+                    &connection_topic,
+                    message.as_bytes(),
+                    QoS1,
+                    // This must be retained message as well, otherise client will get "offline" on reconnect
+                    true,
+                )
+                .await
+            {
+                Ok(()) => {
+                    log::trace!("MQTT message sent successfully");
                 }
-                _ => {
-                    log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
-                }
-            },
-        }
+                Err(mqtt_error) => match mqtt_error {
+                    // This actually means its fine, just nobody is listening
+                    rust_mqtt::packet::v5::reason_codes::ReasonCode::NoMatchingSubscribers => {
+                        log::debug!("MQTT message sent successfully, but nobody is listening");
+                    }
+                    _ => {
+                        log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
+                        // TODO: is this the right approach?
+                        return;
+                    }
+                },
+            }
 
-        loop {
-            let timer = Timer::after(Duration::from_secs(30));
-            embassy_futures::select::select(timer, andon_notifier.changed()).await;
+            // TODO: So much duplication with below, refactor
+            let andon_state;
+            let error_codes;
             match andon_reporter.try_changed() {
                 Some(report) => {
-                    let message = MqttMessage {
-                        id: andon_id,
-                        device_state: report.0.as_str(),
-                        system_state: report.1.as_str(),
-                        codes: report.3,
-                    };
-                    let another_payload: serde_json_core::heapless::String<100> =
-                        serde_json_core::to_string(&message).unwrap();
-                    match client
+                    andon_state = (report.0, report.1);
+                    error_codes = report.3;
+                }
+                None => {
+                    let device = device.lock().await;
+                    andon_state = device.andon_light.get_state();
+                    error_codes = device.andon_light.get_codes();
+                }
+            }
+
+            let first_message = MqttMessage {
+                id: andon_id,
+                system_state: andon_state.0.as_str(),
+                device_state: andon_state.1.as_str(),
+                codes: error_codes,
+            };
+            // TODO: Can I get rid of size notation?
+            let payload: serde_json_core::heapless::String<100> =
+                serde_json_core::to_string(&first_message).unwrap();
+            match client
+                .send_message(&state_topic, payload.as_bytes(), QoS1, true)
+                .await
+            {
+                Ok(()) => {
+                    log::trace!("MQTT message sent successfully");
+                }
+                Err(mqtt_error) => match mqtt_error {
+                    // This actually means its fine, just nobody is listening
+                    rust_mqtt::packet::v5::reason_codes::ReasonCode::NoMatchingSubscribers => {
+                        log::debug!("MQTT message sent successfully, but nobody is listening");
+                    }
+                    _ => {
+                        log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
+                    }
+                },
+            }
+
+            loop {
+                let timer = Timer::after(Duration::from_secs(30));
+                select(timer, andon_notifier.changed()).await;
+                match andon_reporter.try_changed() {
+                    Some(report) => {
+                        let message = MqttMessage {
+                            id: andon_id,
+                            system_state: report.0.as_str(),
+                            device_state: report.1.as_str(),
+                            codes: report.3,
+                        };
+                        let another_payload: serde_json_core::heapless::String<100> =
+                            serde_json_core::to_string(&message).unwrap();
+                        match client
                         .send_message(&state_topic, another_payload.as_bytes(), QoS1, true)
                         .await
                     {
@@ -1102,9 +1104,13 @@ async fn mqtt_publisher(
                             }
                         },
                     }
-                }
-                None => {
-                    client.send_ping().await.unwrap();
+                    }
+                    None => {
+                        if let Err(error) = client.send_ping().await {
+                            log::error!("Failed to send MQTT ping: {:?}", error);
+                            continue 'connection;
+                        }
+                    }
                 }
             }
         }

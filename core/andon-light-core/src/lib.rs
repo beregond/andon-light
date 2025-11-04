@@ -453,6 +453,7 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         vec
     }
 
+    // TODO: shouldn't device state be first?
     pub fn get_report(&self) -> (SystemState, DeviceState, AlertLevel, heapless::Vec<T, U>) {
         let codes = self.get_codes();
         (
