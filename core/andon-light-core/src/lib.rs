@@ -227,6 +227,7 @@ pub trait ErrorCodesBase:
     const MIN_SET_SIZE: usize;
     // CODES_AMOUNT is helper const that stores max amount of error codes
     // (not ok codes) - used for example to size heapless Vec for codes storage
+    // TODO: Currently can't use generic consts in traits, so its kinda useless
     const CODES_AMOUNT: usize;
 
     fn as_str(&self) -> &'static str;

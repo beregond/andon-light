@@ -137,6 +137,8 @@ pub enum ErrorCodes {
     Ok,
     #[code(message = "Device is idle", level = "idle")]
     I001,
+    #[code(message = "Device is turned off", level = "idle")]
+    I002,
     #[code(message = "Device reports warning", level = "warn")]
     W001,
     #[code(message = "TCS sensor is unavailable", level = "system_error")]
@@ -153,6 +155,7 @@ pub enum ErrorCodes {
     E003,
 }
 
+// TODO: add codes amount to signature?
 type AndonLight =
     andon_light_core::AndonLight<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }, MAX_SUPPORTED_LEDS>;
 
@@ -364,15 +367,6 @@ async fn buzzer(
     mut andon_notifier: AndonNotifierReceiver,
     mut andon_reporter: AndonReporterReceiver,
 ) {
-    {
-        let device = device.lock().await;
-        if device.config.buzzer_enabled {
-            log::debug!("Buzzer enabled");
-        } else {
-            log::debug!("Buzzer is disabled, exiting task");
-            return;
-        }
-    }
     let tones = [
         ("c4", 262),
         ("d4", 294),
@@ -490,6 +484,7 @@ async fn rgb_probe_task(
 ) {
     log::debug!("RGB probe task started");
     let mut ticker = Ticker::every(Duration::from_millis(500));
+    // TODO: allow to configure color mapper params from file?
     let mapper = ColorMapper::default();
     let exclusive = Vec::<ErrorCodes, 6>::from_slice(&[
         ErrorCodes::SE003,
@@ -555,9 +550,8 @@ async fn rgb_probe_task(
                             // This color schema is made for Prusa MK4 - in future I hope there
                             // will be more schemas available, but for now this is hardcoded
                             let error_code = match color {
-                                Color::Green | Color::Mint | Color::Lime | Color::Black => {
-                                    ErrorCodes::I001
-                                } // Idle
+                                Color::Black => ErrorCodes::I002, // No data, device is turned off
+                                Color::Green | Color::Mint | Color::Lime => ErrorCodes::I001, // Idle
                                 Color::Blue | Color::Violet | Color::Azure | Color::Cyan => {
                                     ErrorCodes::Ok // Working
                                 }
@@ -700,8 +694,7 @@ async fn main(spawner: Spawner) {
 
     let notifier = ANDON_NOTIFIER.sender();
     let reporter = ANDON_REPORTER.sender();
-    // TODO: Figure it out to NOT clone settings here
-    let device = ANDON.init(Mutex::new(Device::new(app_config.clone())));
+    let device = ANDON.init(Mutex::new(Device::new(app_config)));
     spawner
         .spawn(run_andon_light(
             spi_dev,
@@ -717,16 +710,24 @@ async fn main(spawner: Spawner) {
         .spawn(andon_supervisor(device, notifier, reporter))
         .unwrap();
 
-    let buzzer_pin = peripherals.GPIO3;
-    spawner
-        .spawn(buzzer(
-            buzzer_pin,
-            ledc,
-            device,
-            ANDON_NOTIFIER.receiver().unwrap(),
-            ANDON_REPORTER.receiver().unwrap(),
-        ))
-        .unwrap();
+    {
+        let andon = device.lock().await;
+        if andon.config.buzzer_enabled {
+            log::debug!("Buzzer enabled");
+            let buzzer_pin = peripherals.GPIO3;
+            spawner
+                .spawn(buzzer(
+                    buzzer_pin,
+                    ledc,
+                    device,
+                    ANDON_NOTIFIER.receiver().unwrap(),
+                    ANDON_REPORTER.receiver().unwrap(),
+                ))
+                .unwrap();
+        } else {
+            log::debug!("Buzzer is disabled, exiting task");
+        }
+    }
 
     let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
         .unwrap()
@@ -737,55 +738,58 @@ async fn main(spawner: Spawner) {
     spawner.spawn(rgb_probe_task(sensor, device)).unwrap();
 
     // Initialization of wifi
-    if !app_config.wifi_ssid.is_empty() && !app_config.wifi_password.is_empty() {
-        static NET_RESOURCES: StaticCell<esp_radio::Controller> = StaticCell::new();
-        log::info!("Connecting to WiFi SSID: {}", app_config.wifi_ssid);
-        let esp_radio_ctrl = NET_RESOURCES.init(esp_radio::init().unwrap());
+    {
+        let andon = device.lock().await;
+        if andon.config.wifi_ssid.is_empty() && andon.config.wifi_password.is_empty() {
+            static NET_RESOURCES: StaticCell<esp_radio::Controller> = StaticCell::new();
+            log::info!("Connecting to WiFi SSID: {}", andon.config.wifi_ssid);
+            let esp_radio_ctrl = NET_RESOURCES.init(esp_radio::init().unwrap());
 
-        // We must initialize some kind of interface and start it.
-        let (controller, interfaces) =
-            esp_radio::wifi::new(esp_radio_ctrl, peripherals.WIFI, Default::default()).unwrap();
+            // We must initialize some kind of interface and start it.
+            let (controller, interfaces) =
+                esp_radio::wifi::new(esp_radio_ctrl, peripherals.WIFI, Default::default()).unwrap();
 
-        let wifi_interface = interfaces.sta;
-        let config = embassy_net::Config::dhcpv4(Default::default());
-        let rng = Rng::new();
-        let seed = (rng.random() as u64) << 32 | rng.random() as u64;
+            let wifi_interface = interfaces.sta;
+            let config = embassy_net::Config::dhcpv4(Default::default());
+            let rng = Rng::new();
+            let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
-        // Init network stack
-        static RESOURCES: StaticCell<embassy_net::StackResources<5>> = StaticCell::new();
-        let (stack, runner) = embassy_net::new(
-            wifi_interface,
-            config,
-            RESOURCES.init(embassy_net::StackResources::new()),
-            seed,
-        );
+            // Init network stack
+            static RESOURCES: StaticCell<embassy_net::StackResources<5>> = StaticCell::new();
+            let (stack, runner) = embassy_net::new(
+                wifi_interface,
+                config,
+                RESOURCES.init(embassy_net::StackResources::new()),
+                seed,
+            );
 
-        let mode_config = ModeConfig::Client(
-            ClientConfig::default()
-                .with_ssid(app_config.wifi_ssid.into())
-                .with_password(app_config.wifi_password.into()),
-        );
+            let mode_config = ModeConfig::Client(
+                ClientConfig::default()
+                    .with_ssid(andon.config.wifi_ssid.into())
+                    .with_password(andon.config.wifi_password.into()),
+            );
 
-        spawner.spawn(net_task(runner)).ok();
-        spawner
-            .spawn(connection(controller, stack, mode_config, &WIFI_SIGNAL))
-            .ok();
-
-        if !app_config.mqtt_host.is_empty() {
+            spawner.spawn(net_task(runner)).ok();
             spawner
-                .spawn(mqtt_publisher(
-                    device,
-                    stack,
-                    &WIFI_SIGNAL,
-                    ANDON_NOTIFIER.receiver().unwrap(),
-                    ANDON_REPORTER.receiver().unwrap(),
-                ))
+                .spawn(connection(controller, stack, mode_config, &WIFI_SIGNAL))
                 .ok();
+
+            if !andon.config.mqtt_host.is_empty() {
+                spawner
+                    .spawn(mqtt_publisher(
+                        device,
+                        stack,
+                        &WIFI_SIGNAL,
+                        ANDON_NOTIFIER.receiver().unwrap(),
+                        ANDON_REPORTER.receiver().unwrap(),
+                    ))
+                    .ok();
+            } else {
+                log::info!("MQTT host is empty, skipping MQTT initialization");
+            }
         } else {
-            log::info!("MQTT host is empty, skipping MQTT initialization");
+            log::info!("WiFi SSID or password is empty, skipping WiFi initialization, skipping MQTT initialization");
         }
-    } else {
-        log::info!("WiFi SSID or password is empty, skipping WiFi initialization, skipping MQTT initialization");
     }
 }
 
@@ -849,7 +853,7 @@ struct MqttMessage<'a> {
     id: &'a str,
     device_state: &'a str,
     system_state: &'a str,
-    codes: heapless::Vec<ErrorCodes, { ErrorCodes::CODES_AMOUNT }>,
+    codes: heapless::Vec<ErrorCodes, { ErrorCodes::MIN_SET_SIZE }>,
 }
 
 #[derive(Serialize)]
