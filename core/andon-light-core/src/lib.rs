@@ -227,7 +227,6 @@ pub trait ErrorCodesBase:
     const MIN_SET_SIZE: usize;
     // CODES_AMOUNT is helper const that stores max amount of error codes
     // (not ok codes) - used for example to size heapless Vec for codes storage
-    // TODO: Currently can't use generic consts in traits, so its kinda useless
     const CODES_AMOUNT: usize;
 
     fn as_str(&self) -> &'static str;
@@ -260,22 +259,33 @@ impl Config {
 ///
 /// For BUFFER_SIZE please provide max amount of supported leds multiplied by 12 - in the future it
 /// will be solved by "complex generic constants" in Rust, but for now it is no available yet.
-pub struct AndonLight<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> {
+pub struct AndonLight<
+    ErrorBase: ErrorCodesBase,
+    const CODES_AMOUNT: usize,
+    const INDEX_SET_SIZE: usize,
+    const BUFFER_SIZE: usize,
+> {
     config: Config,
-    codes: FnvIndexSet<T, U>,
+    codes: FnvIndexSet<ErrorBase, INDEX_SET_SIZE>,
     state: (SystemState, DeviceState),
 }
 
-impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, U, BUFFER_SIZE> {
+impl<
+        ErrorBase: ErrorCodesBase,
+        const CODES_AMOUNT: usize,
+        const INDEX_SET_SIZE: usize,
+        const BUFFER_SIZE: usize,
+    > AndonLight<ErrorBase, CODES_AMOUNT, INDEX_SET_SIZE, BUFFER_SIZE>
+{
     pub const fn new(config: Config) -> Self {
         Self {
             config,
-            codes: FnvIndexSet::<T, U>::new(),
+            codes: FnvIndexSet::<ErrorBase, INDEX_SET_SIZE>::new(),
             state: (SystemState::Ok, DeviceState::Ok),
         }
     }
 
-    pub fn notify(&mut self, code: T) -> bool {
+    pub fn notify(&mut self, code: ErrorBase) -> bool {
         log::debug!("Notify: {} - {}", code.as_str(), code.description());
         if let ErrorType::Ok = code.level() {
             return false;
@@ -296,7 +306,7 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         result
     }
 
-    pub fn resolve(&mut self, code: T) -> bool {
+    pub fn resolve(&mut self, code: ErrorBase) -> bool {
         let result = {
             if self.codes.contains(&code) {
                 let removed = self.codes.remove(&code);
@@ -312,7 +322,11 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         result
     }
 
-    pub fn notify_exclusive<const Y: usize>(&mut self, code: T, exclusive: &heapless::Vec<T, Y>) {
+    pub fn notify_exclusive<const Y: usize>(
+        &mut self,
+        code: ErrorBase,
+        exclusive: &heapless::Vec<ErrorBase, Y>,
+    ) {
         for item in exclusive {
             if *item == code {
                 continue;
@@ -326,7 +340,7 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         self.recalculate_state();
     }
 
-    pub fn resolve_all<const Y: usize>(&mut self, codes: &heapless::Vec<T, Y>) {
+    pub fn resolve_all<const Y: usize>(&mut self, codes: &heapless::Vec<ErrorBase, Y>) {
         for code in codes {
             self.codes.remove(code);
         }
@@ -373,37 +387,34 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
     }
 
     fn calculate_state(&self) -> (SystemState, DeviceState) {
-        let mut system_error_counter = 0;
-        let mut system_warn_counter = 0;
-        let mut device_error_counter = 0;
-        let mut device_warn_counter = 0;
-        let mut device_idle_counter = 0;
+        let mut system_error = 0;
+        let mut system_warn = 0;
+        let mut device_error = 0;
+        let mut device_warn = 0;
+        let mut device_idle = 0;
 
         for code in &self.codes {
             match code.level() {
-                ErrorType::DeviceIdle => device_idle_counter += 1,
-                ErrorType::DeviceWarn => device_warn_counter += 1,
-                ErrorType::DeviceError => device_error_counter += 1,
-                ErrorType::SystemWarn => system_warn_counter += 1,
-                ErrorType::SystemError => system_error_counter += 1,
+                ErrorType::DeviceIdle => device_idle += 1,
+                ErrorType::DeviceWarn => device_warn += 1,
+                ErrorType::DeviceError => device_error += 1,
+                ErrorType::SystemWarn => system_warn += 1,
+                ErrorType::SystemError => system_error += 1,
                 ErrorType::Ok => {}
             }
         }
-        let device_state = if device_error_counter > 0 {
-            DeviceState::Error
-        } else if device_warn_counter > 0 {
-            DeviceState::Warn
-        } else if device_idle_counter > 0 {
-            DeviceState::Idle
-        } else {
-            DeviceState::Ok
+
+        let device_state = match () {
+            _ if device_error > 0 => DeviceState::Error,
+            _ if device_warn > 0 => DeviceState::Warn,
+            _ if device_idle > 0 => DeviceState::Idle,
+            _ => DeviceState::Ok,
         };
-        let system_state = if system_error_counter > 0 {
-            SystemState::Error
-        } else if system_warn_counter > 0 {
-            SystemState::Warn
-        } else {
-            SystemState::Ok
+
+        let system_state = match () {
+            _ if system_error > 0 => SystemState::Error,
+            _ if system_warn > 0 => SystemState::Warn,
+            _ => SystemState::Ok,
         };
         (system_state, device_state)
     }
@@ -446,8 +457,8 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
         core::array::from_fn(|i| self.generate_pattern(test_procedure[i], Scaling::Repeat))
     }
 
-    pub fn get_codes(&self) -> heapless::Vec<T, U> {
-        let mut vec = heapless::Vec::<T, U>::new();
+    pub fn get_codes(&self) -> heapless::Vec<ErrorBase, CODES_AMOUNT> {
+        let mut vec = heapless::Vec::<ErrorBase, CODES_AMOUNT>::new();
         for code in &self.codes {
             vec.push(*code).unwrap();
         }
@@ -455,7 +466,14 @@ impl<T: ErrorCodesBase, const U: usize, const BUFFER_SIZE: usize> AndonLight<T, 
     }
 
     // TODO: shouldn't device state be first?
-    pub fn get_report(&self) -> (SystemState, DeviceState, AlertLevel, heapless::Vec<T, U>) {
+    pub fn get_report(
+        &self,
+    ) -> (
+        SystemState,
+        DeviceState,
+        AlertLevel,
+        heapless::Vec<ErrorBase, CODES_AMOUNT>,
+    ) {
         let codes = self.get_codes();
         (
             self.state.0.clone(),
