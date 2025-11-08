@@ -274,6 +274,19 @@ impl Device {
 
 type DeviceAsyncMutex = Mutex<CriticalSectionRawMutex, Device>;
 
+macro_rules! notify {
+    ($device:expr, $error_code:expr) => {{
+        let mut device = $device.lock().await;
+        device.andon_light.notify($error_code);
+    }};
+}
+macro_rules! resolve {
+    ($device:expr, $error_code:expr) => {{
+        let mut device = $device.lock().await;
+        device.andon_light.resolve($error_code);
+    }};
+}
+
 #[embassy_executor::task]
 async fn run_andon_light(
     mut spi: SpiDevice<'static, NoopRawMutex, SpiDmaBus<'static, Async>, Output<'static>>,
@@ -564,8 +577,6 @@ async fn rgb_probe_task(
                         );
                         {
                             log::trace!("Color detected: {color:?}");
-                            let mut device = device.lock().await;
-                            device.andon_light.resolve(ErrorCodes::SE003);
                             // This color schema is made for Prusa MK4 - in future I hope there
                             // will be more schemas available, but for now this is hardcoded
                             let error_code = match color {
@@ -578,6 +589,8 @@ async fn rgb_probe_task(
                                 Color::Red | Color::Pink | Color::Magenta => ErrorCodes::E001, // Critical error
                                 Color::Gray | Color::White => ErrorCodes::E003, // Ambigous data
                             };
+                            let mut device = device.lock().await;
+                            device.andon_light.resolve(ErrorCodes::SE003);
                             device.andon_light.notify_exclusive(error_code, &exclusive);
                         }
                     }
@@ -930,10 +943,7 @@ async fn mqtt_publisher(
             // Validation,
             ("", _, "", _) | ("", _, _, "") => {
                 log::error!("MQTT topic parts are not properly configured, cannot proceed with MQTT publisher");
-                {
-                    let mut device = device.lock().await;
-                    device.andon_light.notify(ErrorCodes::SW003);
-                }
+                notify!(device, ErrorCodes::SW003);
                 return;
             }
             // Prefix may be unset
@@ -945,10 +955,7 @@ async fn mqtt_publisher(
             }
             _ => {
                 log::error!("Unexpected MQTT configuration");
-                {
-                    let mut device = device.lock().await;
-                    device.andon_light.notify(ErrorCodes::SW003);
-                }
+                notify!(device, ErrorCodes::SW003);
                 return;
             }
         }
@@ -1005,9 +1012,7 @@ async fn mqtt_publisher(
                     Ok(address) => address,
                     Err(e) => {
                         log::error!("DNS lookup error: {e:?}");
-                        {
-                            device.andon_light.notify(ErrorCodes::SW004);
-                        }
+                        device.andon_light.notify(ErrorCodes::SW004);
                         continue 'connection;
                     }
                 };
@@ -1016,16 +1021,10 @@ async fn mqtt_publisher(
                 log::debug!("MQTT connecting to {remote_endpoint:?}...");
                 if let Err(e) = socket.connect(remote_endpoint).await {
                     log::error!("MQTT connect error: {:?}", e);
-                    // {
-                    //     let mut device = device.lock().await;
-                    //     device.andon_light.notify(ErrorCodes::SW005);
-                    // }
+                    device.andon_light.notify(ErrorCodes::SW005);
                     continue 'connection;
                 }
-                // {
-                //     let mut device = device.lock().await;
-                //     device.andon_light.resolve(ErrorCodes::SW005);
-                // }
+                device.andon_light.resolve(ErrorCodes::SW005);
                 log::debug!("MQTT TCP connection established");
 
                 config = MqttClientConfig::<5, CountingRng>::new(MQTTv5, CountingRng(20000));
@@ -1063,18 +1062,11 @@ async fn mqtt_publisher(
                     } else {
                         log::error!("Other MQTT Error: {:?}", mqtt_error);
                     }
-                    // TODO: Make macro out of it
-                    {
-                        let mut device = device.lock().await;
-                        device.andon_light.notify(ErrorCodes::SW006);
-                    }
+                    notify!(device, ErrorCodes::SW006);
                     continue 'connection;
                 }
             }
-            {
-                let mut device = device.lock().await;
-                device.andon_light.resolve(ErrorCodes::SW006);
-            }
+            resolve!(device, ErrorCodes::SW006);
 
             let message: serde_json_core::heapless::String<100> =
                 serde_json_core::to_string(&MqttStatusMessage {
@@ -1089,12 +1081,10 @@ async fn mqtt_publisher(
                 .await
                 .is_err()
             {
-                let mut device = device.lock().await;
-                device.andon_light.notify(ErrorCodes::SW007);
+                notify!(device, ErrorCodes::SW007);
                 continue 'connection;
             } else {
-                let mut device = device.lock().await;
-                device.andon_light.resolve(ErrorCodes::SW007);
+                resolve!(device, ErrorCodes::SW007);
             }
 
             let andon_state;
@@ -1125,12 +1115,10 @@ async fn mqtt_publisher(
                 .await
                 .is_err()
             {
-                let mut device = device.lock().await;
-                device.andon_light.notify(ErrorCodes::SW007);
+                notify!(device, ErrorCodes::SW007);
                 continue 'connection;
             } else {
-                let mut device = device.lock().await;
-                device.andon_light.resolve(ErrorCodes::SW007);
+                resolve!(device, ErrorCodes::SW007);
             }
 
             loop {
@@ -1151,16 +1139,14 @@ async fn mqtt_publisher(
                             .await
                             .is_err()
                         {
-                            let mut device = device.lock().await;
-                            device.andon_light.notify(ErrorCodes::SW007);
+                            notify!(device, ErrorCodes::SW007);
                             continue 'connection;
                         }
                     }
                     None => {
                         if let Err(error) = client.send_ping().await {
                             log::error!("Failed to send MQTT ping: {:?}", error);
-                            let mut device = device.lock().await;
-                            device.andon_light.notify(ErrorCodes::SW008);
+                            notify!(device, ErrorCodes::SW007);
                             continue 'connection;
                         }
                     }
