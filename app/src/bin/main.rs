@@ -149,6 +149,16 @@ pub enum ErrorCodes {
     SW002,
     #[code(message = "MQTT config error", level = "system_warn")]
     SW003,
+    #[code(message = "MQTT encountered DNS error", level = "system_warn")]
+    SW004,
+    #[code(message = "MQTT network connection error", level = "system_warn")]
+    SW005,
+    #[code(message = "MQTT connection to broker failed", level = "system_warn")]
+    SW006,
+    #[code(message = "MQTT couldn't send message", level = "system_warn")]
+    SW007,
+    #[code(message = "MQTT couldn't send ping", level = "system_warn")]
+    SW008,
     #[code(message = "Failed to enable TCS sensor", level = "system_error")]
     SE002,
     #[code(message = "TCS sensor error", level = "system_error")]
@@ -943,7 +953,7 @@ async fn mqtt_publisher(
             }
         }
     }
-    // NOTE: No resolve here, as we are having hard return above
+    // NOTE: No resolve here for SW003, as we are having hard return above
 
     let mut current_state: WifiState;
     let lwt_payload: serde_json_core::heapless::String<70> =
@@ -964,20 +974,19 @@ async fn mqtt_publisher(
                     log::debug!("MQTT publisher detected WiFi connected, starting MQTT client...");
                     break;
                 }
+                // No warns here - they are handled in connection task
                 WifiState::Disconnected => {
                     log::debug!("MQTT publisher detected WiFi disconnected, waiting...");
-                    // TODO: warn
                 }
             }
         }
-        // TODO: resolve
 
         'connection: loop {
             if matches!(wifi_signal.try_take(), Some(WifiState::Disconnected)) {
                 log::debug!(
                     "MQTT publisher detected WiFi disconnected, dropping MQTT connection if any..."
                 );
-                // TODO: warn
+                // No warns here - they are handled in connection task
                 continue 'main;
             }
             let mut rx_buffer = [0; 4096];
@@ -987,28 +996,36 @@ async fn mqtt_publisher(
             socket.set_timeout(Some(embassy_time::Duration::from_secs(30)));
             let mut config;
             {
-                let andon = device.lock().await;
+                let mut device = device.lock().await;
                 let address = match stack
-                    .dns_query(andon.config.mqtt_host, DnsQueryType::A)
+                    .dns_query(device.config.mqtt_host, DnsQueryType::A)
                     .await
                     .map(|a| a[0])
                 {
                     Ok(address) => address,
                     Err(e) => {
                         log::error!("DNS lookup error: {e:?}");
-                        // TODO: warn
+                        {
+                            device.andon_light.notify(ErrorCodes::SW004);
+                        }
                         continue 'connection;
                     }
                 };
-                // TODO: resolve
-                let remote_endpoint = (address, andon.config.mqtt_port);
+                device.andon_light.resolve(ErrorCodes::SW004);
+                let remote_endpoint = (address, device.config.mqtt_port);
                 log::debug!("MQTT connecting to {remote_endpoint:?}...");
                 if let Err(e) = socket.connect(remote_endpoint).await {
                     log::error!("MQTT connect error: {:?}", e);
-                    // TODO: warn
+                    // {
+                    //     let mut device = device.lock().await;
+                    //     device.andon_light.notify(ErrorCodes::SW005);
+                    // }
                     continue 'connection;
                 }
-                // TODO: resolve
+                // {
+                //     let mut device = device.lock().await;
+                //     device.andon_light.resolve(ErrorCodes::SW005);
+                // }
                 log::debug!("MQTT TCP connection established");
 
                 config = MqttClientConfig::<5, CountingRng>::new(MQTTv5, CountingRng(20000));
@@ -1019,11 +1036,12 @@ async fn mqtt_publisher(
                 config.keep_alive = 60;
                 config.add_will(&connection_topic, lwt_payload.as_bytes(), true);
 
-                if !andon.config.mqtt_username.is_empty() && !andon.config.mqtt_password.is_empty()
+                if !device.config.mqtt_username.is_empty()
+                    && !device.config.mqtt_password.is_empty()
                 {
-                    log::debug!("Using MQTT username: {}", andon.config.mqtt_username);
-                    config.add_username(andon.config.mqtt_username);
-                    config.add_password(andon.config.mqtt_password);
+                    log::debug!("Using MQTT username: {}", device.config.mqtt_username);
+                    config.add_username(device.config.mqtt_username);
+                    config.add_password(device.config.mqtt_password);
                 } else {
                     log::debug!("No MQTT username/password provided, connecting anonymously");
                 }
@@ -1045,12 +1063,18 @@ async fn mqtt_publisher(
                     } else {
                         log::error!("Other MQTT Error: {:?}", mqtt_error);
                     }
-
-                    // TODO: warn
+                    // TODO: Make macro out of it
+                    {
+                        let mut device = device.lock().await;
+                        device.andon_light.notify(ErrorCodes::SW006);
+                    }
                     continue 'connection;
                 }
             }
-            // TODO: resolve
+            {
+                let mut device = device.lock().await;
+                device.andon_light.resolve(ErrorCodes::SW006);
+            }
 
             let message: serde_json_core::heapless::String<100> =
                 serde_json_core::to_string(&MqttStatusMessage {
@@ -1061,32 +1085,18 @@ async fn mqtt_publisher(
                 // TODO: handle error
                 .unwrap();
 
-            match client
-                .send_message(
-                    &connection_topic,
-                    message.as_bytes(),
-                    QoS1,
-                    // This must be retained message as well, otherise client will get "offline" on reconnect
-                    true,
-                )
+            if send_mqtt_message(&mut client, &connection_topic, message.as_bytes())
                 .await
+                .is_err()
             {
-                Ok(()) => {
-                    log::trace!("MQTT message sent successfully");
-                }
-                Err(mqtt_error) => match mqtt_error {
-                    // This actually means its fine, just nobody is listening
-                    ReasonCode::NoMatchingSubscribers => {
-                        log::debug!("MQTT message sent successfully, but nobody is listening");
-                    }
-                    _ => {
-                        log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
-                        continue 'connection;
-                    }
-                },
+                let mut device = device.lock().await;
+                device.andon_light.notify(ErrorCodes::SW007);
+                continue 'connection;
+            } else {
+                let mut device = device.lock().await;
+                device.andon_light.resolve(ErrorCodes::SW007);
             }
 
-            // TODO: So much duplication with below, refactor
             let andon_state;
             let error_codes;
             match andon_reporter.try_changed() {
@@ -1110,23 +1120,17 @@ async fn mqtt_publisher(
             // TODO: Can I get rid of size notation?
             let payload: serde_json_core::heapless::String<100> =
                 serde_json_core::to_string(&first_message).unwrap();
-            match client
-                .send_message(&state_topic, payload.as_bytes(), QoS1, true)
+
+            if send_mqtt_message(&mut client, &state_topic, payload.as_bytes())
                 .await
+                .is_err()
             {
-                Ok(()) => {
-                    log::trace!("MQTT message sent successfully");
-                }
-                Err(mqtt_error) => match mqtt_error {
-                    // This actually means its fine, just nobody is listening
-                    ReasonCode::NoMatchingSubscribers => {
-                        log::debug!("MQTT message sent successfully, but nobody is listening");
-                    }
-                    _ => {
-                        log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
-                        continue 'connection;
-                    }
-                },
+                let mut device = device.lock().await;
+                device.andon_light.notify(ErrorCodes::SW007);
+                continue 'connection;
+            } else {
+                let mut device = device.lock().await;
+                device.andon_light.resolve(ErrorCodes::SW007);
             }
 
             loop {
@@ -1142,39 +1146,29 @@ async fn mqtt_publisher(
                         };
                         let another_payload: serde_json_core::heapless::String<100> =
                             serde_json_core::to_string(&message).unwrap();
-                        match client
-                            .send_message(&state_topic, another_payload.as_bytes(), QoS1, true)
+
+                        if send_mqtt_message(&mut client, &state_topic, another_payload.as_bytes())
                             .await
+                            .is_err()
                         {
-                            Ok(()) => {
-                                log::trace!("MQTT message sent successfully");
-                                // TODO: resolve
-                            }
-                            Err(mqtt_error) => {
-                                match mqtt_error {
-                                    // This actually means its fine, just nobody is listening
-                                    ReasonCode::NoMatchingSubscribers => {
-                                        log::debug!("MQTT message sent successfully, but nobody is listening");
-                                    }
-                                    _ => {
-                                        log::error!(
-                                            "Failed to send MQTT connection message: {:?}",
-                                            mqtt_error
-                                        );
-                                        // TODO: warn
-                                        continue 'connection;
-                                    }
-                                }
-                            }
+                            let mut device = device.lock().await;
+                            device.andon_light.notify(ErrorCodes::SW007);
+                            continue 'connection;
                         }
                     }
                     None => {
                         if let Err(error) = client.send_ping().await {
                             log::error!("Failed to send MQTT ping: {:?}", error);
-                            // TODO: warn
+                            let mut device = device.lock().await;
+                            device.andon_light.notify(ErrorCodes::SW008);
                             continue 'connection;
                         }
                     }
+                }
+                {
+                    let mut device = device.lock().await;
+                    device.andon_light.resolve(ErrorCodes::SW007);
+                    device.andon_light.resolve(ErrorCodes::SW008);
                 }
             }
         }
@@ -1185,4 +1179,27 @@ pub fn generate_mqtt_topic(root_topic: &str, suffix: &str) -> heapless::String<6
     let mut topic = heapless::String::<60>::new();
     write!(topic, "{}/{}", root_topic, suffix).unwrap();
     topic
+}
+
+pub async fn send_mqtt_message(
+    client: &mut MqttClient<'_, TcpSocket<'_>, 5, CountingRng>,
+    topic: &str,
+    payload: &[u8],
+) -> Result<(), ReasonCode> {
+    match client.send_message(topic, payload, QoS1, true).await {
+        Ok(()) => {
+            log::trace!("MQTT message sent successfully");
+            Ok(())
+        }
+        Err(mqtt_error) => match mqtt_error {
+            ReasonCode::NoMatchingSubscribers => {
+                log::debug!("MQTT message sent successfully, but nobody is listening");
+                Ok(()) // If nobody is listening, we still consider it successful
+            }
+            _ => {
+                log::error!("Failed to send MQTT connection message: {:?}", mqtt_error);
+                Err(mqtt_error)
+            }
+        },
+    }
 }
