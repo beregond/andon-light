@@ -33,32 +33,41 @@ The algorithm works like this:
   - If no such pattern exists, choose the one that matches either of the states
 - Choose sound that matches alert level
 
-## Default config
+## Config
 
 Store this in `andon.jso`. Currently there is no support for long file names (aka VFAT).
 
 ``` json
 {
     "version": 0,
-    "id": "my-3d-printer", # It will default to 'light-{MAC_ADDRESS}'
+    "id": "my-3d-printer",
     "leds_amount": 16,
     "brightness": 10,
     "buzzer_enabled": true,
 
-    // WiFi is optional, but reqired for MQTT
     "wifi_ssid": "your-ssid",
     "wifi_password"": "your-password",
 
-    // MQTT is optional, will work only with WiFi enabled
-    "mqtt_host"": "mqtt.example.com",
+    "mqtt_host": "mqtt.example.com",
     "mqtt_port": 1883,
-    "mqtt_username": "your-username", // Or null for anonymous
-    "mqtt_password": "your-password", // Or null for anonymous
-    "mqtt_device_type": "cnc", // For topic construction, skipped if mqtt_topic is set
-    "mqtt_topic_prefix": "andon", // For topic construction, skipped if mqtt_topic is set
-    "mqtt_topic": null // If null, topic will be constructed using prefix, device type and id
+    "mqtt_username": "your-username",
+    "mqtt_password": "your-password",
+    "mqtt_device_type": "cnc",
+    "mqtt_topic_prefix": "andon",
+    "mqtt_topic": null 
 }
 ```
+
+### Config reference
+
+- `id` - unique identifier of the device, it will default to `light-{MAC_ADDRESS}` if not set
+- WiFi settings are optional, but required for MQTT
+- MQTT section is optional, will work only with WiFi enabled
+- `mqtt_username` - don't set for anonymous connection
+- `mqtt_password` don't set for anonymous connection
+- `mqtt_device_type` - `cnc` by default, used for mqtt topic construction, skipped if `mqtt_topic` is set
+- `mqtt_topic_prefix` - `andon` by default, used for topic construction, skipped if `mqtt_topic` is set
+- `mqtt_topic` - `null` by default, if not set - topic will be constructed using prefix, device type and id
 
 ## More docs
 

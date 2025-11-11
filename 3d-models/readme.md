@@ -18,7 +18,7 @@ Print it vertically with 5mm brim. Supports are required, but avoid putting them
 
 Preview
 
-![Tower print preview](tower/preview.png)
+![Tower print preview](tower/tower-preview.png)
 
 ### Where to avoid supports
 
@@ -36,7 +36,7 @@ Print this part upside down, so you don't need supports.
 
 Preview
 
-![Hood print preview](hood/preview.png)
+![Hood print preview](hood/hood-preview.png)
 
 ## cap
 
@@ -48,7 +48,7 @@ Top cap for the tower. Print it with supports.
 
 Preview
 
-![Cap print preview](cap/preview.png)
+![Cap print preview](cap/cap-preview.png)
 
 ## Shell
 
@@ -60,7 +60,7 @@ Preview
 
 Prewiew
 
-![Shell print preview](shell/preview.png)
+![Shell print preview](shell/shell-preview.png)
 
 ## Bottom Cap
 
