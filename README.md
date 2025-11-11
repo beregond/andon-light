@@ -40,7 +40,7 @@ Store this in `andon.jso`. Currently there is no support for long file names (ak
 ``` json
 {
     "version": 0,
-    "id": "my-3d-printer", // It will default to 'light-{MAC_ADDRESS}'
+    "id": "my-3d-printer", # It will default to 'light-{MAC_ADDRESS}'
     "leds_amount": 16,
     "brightness": 10,
     "buzzer_enabled": true,
@@ -56,7 +56,7 @@ Store this in `andon.jso`. Currently there is no support for long file names (ak
     "mqtt_password": "your-password", // Or null for anonymous
     "mqtt_device_type": "cnc", // For topic construction, skipped if mqtt_topic is set
     "mqtt_topic_prefix": "andon", // For topic construction, skipped if mqtt_topic is set
-    "mqtt_topic": null, // If null, topic will be constructed using prefix, device type and id
+    "mqtt_topic": null // If null, topic will be constructed using prefix, device type and id
 }
 ```
 
