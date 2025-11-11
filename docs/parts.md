@@ -9,13 +9,16 @@
   - one with angle plug for programming - because of lack of space
   - second one with straight plug for power supply
 - USB charger
-- 3x 2k Ohm resistors
-- 2x PNP transistors (S8550)
+- USB-C charging port
+- 2x 2k Ohm resistors
+- PNP transistor (S8550)
 - buzzer with generator - THT 12mm
-- red LED
-- USB-C THT socket - like USB4085-GF-A from GCT
-- TCS3472 sensor (the one used in the project is from Adafruit)
+- red THT LED (for heartbeat, so preferrably RED)
+- TCS3472 sensor
 - four pin socket and connector
+- Wire-To-Board Terminal Block (ARK connectors), 2.54 mm
+  - 4 Ways - 2x
+  - 3 Ways - 1x
 - some 0.5mm^2 wire - it should be quite thin to make your life easier; you can harvest some from ethernet cable
 - transparent plexiglass tube:
   - 20 mm outer diameter
@@ -34,7 +37,6 @@
 - D10/GPIO10 (MOSI) <-> SD reader MOSI, LED stripes data in (via transistor)
 - D9/GPIO9 (MISO) <-> SD reader MISO
 - D8/GPIO8 (SCK) <-> SD reader SCK
-- D7/GPIO20 <-> "Data transistor" base
 - D6/GPIO21 - not connected
 - D5/GPIO7 <-> TCS3472 SCL
 - D4/GPIO6 <-> TCS3472 SDA
