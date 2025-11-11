@@ -847,10 +847,7 @@ async fn connection(
         if let WifiStaState::Connected = esp_radio::wifi::sta_state() {
             // wait until we're no longer connected
             controller.wait_for_event(WifiEvent::StaDisconnected).await;
-            {
-                let mut device = device.lock().await;
-                device.andon_light.notify(ErrorCodes::SW002);
-            }
+            notify!(device, ErrorCodes::SW002);
             Timer::after(Duration::from_millis(5000)).await
         }
         if !matches!(controller.is_started(), Ok(true)) {
@@ -891,10 +888,7 @@ async fn connection(
             }
             Err(e) => {
                 log::debug!("Failed to connect to wifi: {e:?}");
-                {
-                    let mut device = device.lock().await;
-                    device.andon_light.notify(ErrorCodes::SW001);
-                }
+                notify!(device, ErrorCodes::SW001);
                 wifi_signal.signal(WifiState::Disconnected);
                 Timer::after(Duration::from_millis(5000)).await
             }

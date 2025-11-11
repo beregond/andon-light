@@ -465,7 +465,7 @@ impl<
         vec
     }
 
-    // TODO: shouldn't device state be first?
+    // TODO: Figure it out to return struct
     pub fn get_report(
         &self,
     ) -> (
