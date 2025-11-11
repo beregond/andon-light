@@ -46,7 +46,7 @@ Store this in `andon.jso`. Currently there is no support for long file names (ak
     "buzzer_enabled": true,
 
     "wifi_ssid": "your-ssid",
-    "wifi_password"": "your-password",
+    "wifi_password": "your-password",
 
     "mqtt_host": "mqtt.example.com",
     "mqtt_port": 1883,
@@ -54,7 +54,7 @@ Store this in `andon.jso`. Currently there is no support for long file names (ak
     "mqtt_password": "your-password",
     "mqtt_device_type": "cnc",
     "mqtt_topic_prefix": "andon",
-    "mqtt_topic": null 
+    "mqtt_topic": "your/custiom/topic"
 }
 ```
 

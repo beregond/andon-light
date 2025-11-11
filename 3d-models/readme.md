@@ -76,7 +76,8 @@ Preview
 
 Holder consist of three parts - "half" (of doughnut), "jam" and "half with hold" - you need to print all of them. No supports needed, just remember to print "half with hold" upside down.
 
-> [!TIP] If you want to create your own holder - print "half" and "jam" - but create your own "half with hold" part. You can use "half.step" as a base and add your own design on top of it.
+> [!TIP]
+> If you want to create your own holder - print "half" and "jam" - but create your own "half with hold" part. You can use "half.step" as a base and add your own design on top of it.
 
 - Half
   - [step](doughnut/half.step)
@@ -105,7 +106,8 @@ Holder consist of three parts - "half" (of doughnut), "jam" and "half with hold"
 
 ## Junction box
 
-> [!NOTE] Step file for junction box consist of all three sub parts - top, bottom and nut.
+> [!NOTE]
+> Step file for junction box consist of all three sub parts - top, bottom and nut.
 
 Print junction box with supports - they are needed to support threads halves.
 
