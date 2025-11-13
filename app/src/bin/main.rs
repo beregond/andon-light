@@ -291,13 +291,8 @@ macro_rules! resolve {
 async fn run_andon_light(
     mut spi: SpiDevice<'static, NoopRawMutex, SpiDmaBus<'static, Async>, Output<'static>>,
     device: &'static DeviceAsyncMutex,
-    mut led_reset: Output<'static>,
     mut andon_notifier: AndonNotifierReceiver,
 ) {
-    log::debug!("Resetting leds");
-    led_reset.set_high();
-    led_reset.set_low();
-
     log::debug!("Start of led test procedure");
 
     let test_patterns;
@@ -316,17 +311,17 @@ async fn run_andon_light(
 
     log::debug!("Entering regular leds cycle");
     loop {
-        select(
-            Timer::after(Duration::from_secs(10)),
-            andon_notifier.changed(),
-        )
-        .await;
         let pattern;
         {
             let mut device = device.lock().await;
             pattern = device.andon_light.generate_signal();
         }
         spi.write(pattern.as_slice()).await.unwrap();
+        select(
+            Timer::after(Duration::from_secs(10)),
+            andon_notifier.changed(),
+        )
+        .await;
     }
 }
 
@@ -720,8 +715,6 @@ async fn main(spawner: Spawner) {
     let leds_select = Output::new(peripherals.GPIO5, Level::Low, OutputConfig::default());
     let spi_dev = SpiDevice::new(spi_bus, leds_select);
 
-    let led_reset = Output::new(peripherals.GPIO20, Level::High, OutputConfig::default());
-
     static ANDON: StaticCell<DeviceAsyncMutex> = StaticCell::new();
 
     let notifier = ANDON_NOTIFIER.sender();
@@ -731,7 +724,6 @@ async fn main(spawner: Spawner) {
         .spawn(run_andon_light(
             spi_dev,
             device,
-            led_reset,
             ANDON_NOTIFIER.receiver().unwrap(),
         ))
         .unwrap();
