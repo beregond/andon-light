@@ -40,7 +40,7 @@
 - D6/GPIO21 - not connected
 - D5/GPIO7 <-> TCS3472 SCL
 - D4/GPIO6 <-> TCS3472 SDA
-- D3/GPIO5 <-> "Ground transistor" base
+- D3/GPIO20 <-> "LED stripes transistor" base
 - D2/GPIO4 <-> red LED anode
 - D1/GPIO3 <-> buzzer anode (+)
 - D0/GPIO2 <-> TCS3472 CS

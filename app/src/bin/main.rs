@@ -712,7 +712,7 @@ async fn main(spawner: Spawner) {
 
     log::debug!("Starting up leds control");
 
-    let leds_select = Output::new(peripherals.GPIO5, Level::Low, OutputConfig::default());
+    let leds_select = Output::new(peripherals.GPIO20, Level::Low, OutputConfig::default());
     let spi_dev = SpiDevice::new(spi_bus, leds_select);
 
     static ANDON: StaticCell<DeviceAsyncMutex> = StaticCell::new();
