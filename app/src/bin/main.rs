@@ -74,14 +74,9 @@ pub enum WifiState {
 }
 
 const CONFIG_BUFFER_SIZE: usize = 4096;
-const DEFAULT_LEDS_AMOUNT: usize = default_from_env!(DEFAULT_LEDS_AMOUNT, 16);
+const LEDS_AMOUNT: usize = default_from_env!(LEDS_AMOUNT, 16);
 // Magic inside - see andon_light_core docs to understand why '* 12' is here
 const MAX_SUPPORTED_LEDS: usize = default_from_env!(MAX_SUPPORTED_LEDS, 16) * 12;
-
-#[inline]
-const fn _default_leds() -> usize {
-    DEFAULT_LEDS_AMOUNT
-}
 
 #[inline]
 const fn _empty_str() -> &'static str {
@@ -221,8 +216,6 @@ struct DeviceConfig {
     id: &'static str,
     #[serde(default = "_default_true")]
     buzzer_enabled: bool,
-    #[serde(default = "_default_leds")]
-    leds_amount: usize,
     #[serde(default = "_default_brightness")]
     brightness: u8,
     #[serde(default = "_empty_str")]
@@ -253,7 +246,7 @@ impl Default for DeviceConfig {
 
 impl DeviceConfig {
     pub fn generate_andon_config(&self) -> andon_light_core::Config {
-        andon_light_core::Config::new(self.leds_amount as u8, self.brightness)
+        andon_light_core::Config::new(LEDS_AMOUNT as u8, self.brightness)
     }
 }
 

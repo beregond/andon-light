@@ -41,7 +41,6 @@ Store this in `andon.jso`. Currently there is no support for long file names (ak
 {
     "version": 0,
     "id": "my-3d-printer",
-    "leds_amount": 16,
     "brightness": 10,
     "buzzer_enabled": true,
 
