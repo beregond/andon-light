@@ -3,14 +3,16 @@
 **Use .step files as first choice**. All parts were printed with (Prusa MK4S printer and):
 
 - standard black PLA
-- 0.4mm nozzle and 0.2mm layer height (in speed mode)
+- 0.4mm nozzle
+  - 0.15 layer height for shell in quality/structural mode (to print inner threads properly)
+  - 0.2mm layer height for rest of parts (in speed mode)
 - 15% infill (gyroid, but thats secondary)
 
 Most of parts you should print in default orientation, unless stated otherwise. Below you can see extra settings for each part.
 
 ## Tower
 
-Print it vertically with 5mm brim. Supports are required, but avoid putting them everywhere (see picture below) to make your life easier.
+Print it vertically. Supports are required, but avoid putting them in tight spaces inside (see picture below).
 
 - [step](tower/tower.step)
 - [3mf](tower/tower.3mf)
@@ -25,6 +27,18 @@ Preview
 You don't want to put supports between PCB holds and in the middle of the tower - only have them for flat overhangs outside and inside the tower.
 
 ![Block supports](tower/block-supports.png)
+
+## Shell
+
+Quality/structural mode is **required** to print threads properly (like 0.15 layer height in structural mode), 5mm inner brim is **recommended** (you can scrape it off with deburring tool easily).
+
+- [step](shell/shell.step)
+- [3mf](shell/shell.3mf)
+- [stl](shell/shell.stl)
+
+Preview
+
+![Shell print preview](shell/shell-preview.png)
 
 ## Hood
 
@@ -49,18 +63,6 @@ Top cap for the tower. Print it with supports.
 Preview
 
 ![Cap print preview](cap/cap-preview.png)
-
-## Shell
-
-**5mm inner brim is recommended**, you can scrape it off with deburring tool easily.
-
-- [step](shell/shell.step)
-- [3mf](shell/shell.3mf)
-- [stl](shell/shell.stl)
-
-Prewiew
-
-![Shell print preview](shell/shell-preview.png)
 
 ## Bottom Cap
 
