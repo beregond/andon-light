@@ -506,12 +506,13 @@ async fn rgb_probe_task(
     let mut ticker = Ticker::every(Duration::from_millis(500));
     // TODO: allow to configure color mapper params from file?
     let mapper = ColorMapper::default();
-    let exclusive = Vec::<ErrorCodes, 6>::from_slice(&[
+    let exclusive = Vec::<ErrorCodes, 7>::from_slice(&[
         ErrorCodes::SE003,
         ErrorCodes::E001,
         ErrorCodes::E002,
         ErrorCodes::E003,
         ErrorCodes::I001,
+        ErrorCodes::I002,
         ErrorCodes::W001,
     ])
     .unwrap();
