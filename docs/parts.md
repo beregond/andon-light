@@ -16,6 +16,9 @@
 - red THT LED (for heartbeat, so preferrably RED)
 - TCS3472 sensor
 - four pin socket and connector
+- ceramic capacitors:
+  - 1uF 50V
+  - 10nF 50V
 - Wire-To-Board Terminal Block (ARK connectors), 2.54 mm
   - 4 Ways - 2x
   - 3 Ways - 1x
@@ -44,5 +47,6 @@
 - D2/GPIO4 <-> red LED anode
 - D1/GPIO3 <-> buzzer anode (+)
 - D0/GPIO2 <-> TCS3472 CS
+- connect both capacitors between 5V and GND pins of ESP
 
 ![wiring](wiring.png)

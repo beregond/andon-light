@@ -9,6 +9,9 @@ This document is not everything you need to know about this project, more info b
 > [!WARNING]
 > This project is still in early development stage, so it may not work as expected.
 
+> [!WARNING]
+> If you experience lag during startup it means that either you don't have SD card inserted (with proper config) - and thats due to bug, or your power source is too weak (especially if you enable WiFi this may be the problem)
+
 ## How does it work?
 
 Andon light is a tool for monitoring external device and signaling its state using lights and sounds.

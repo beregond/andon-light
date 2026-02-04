@@ -2,7 +2,7 @@
 <project>
   <fileVersion>
     <major>5</major>
-    <minor>6</minor>
+    <minor>10</minor>
     <build>0</build>
   </fileVersion>
   <title>New Project</title>
@@ -13,6 +13,7 @@
   <dotSpacing>1</dotSpacing>
   <components>
     <diylc.shapes.Rectangle>
+      <id>0f4b5895-ac78-4c80-b42b-14b1aad2415b</id>
       <name>RECT5</name>
       <alpha>127</alpha>
       <value></value>
@@ -31,6 +32,7 @@
       <edgeRadius value="0.0" unit="mm"/>
     </diylc.shapes.Rectangle>
     <diylc.boards.PerfBoard>
+      <id>6da59921-e4d6-4abb-bdd9-980b7f04df18</id>
       <name>Board2</name>
       <alpha>127</alpha>
       <value></value>
@@ -57,6 +59,7 @@
       <padColor hex="da8a67"/>
     </diylc.boards.PerfBoard>
     <diylc.connectivity.CopperTrace>
+      <id>03f951f2-182b-4528-a9d1-5d801cd28004</id>
       <name>Trace4</name>
       <alpha>127</alpha>
       <points>
@@ -75,8 +78,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.electromechanical.PinHeader>
+      <id>ba9cca97-d0e2-48a5-a32e-715bf5bd023f</id>
       <name>PH1</name>
       <alpha>127</alpha>
       <orientation>DEFAULT</orientation>
@@ -97,6 +102,7 @@
       <shroudColor hex="595959"/>
     </diylc.electromechanical.PinHeader>
     <diylc.electromechanical.PinHeader>
+      <id>05a4e102-8cb1-4910-8eff-ad5ef62b3e9f</id>
       <name>PH2</name>
       <alpha>127</alpha>
       <orientation>DEFAULT</orientation>
@@ -117,6 +123,7 @@
       <shroudColor hex="595959"/>
     </diylc.electromechanical.PinHeader>
     <diylc.electromechanical.PinHeader>
+      <id>383bb0d5-d1b9-4a07-b0ca-ab0e386d233c</id>
       <name>PH3</name>
       <alpha>127</alpha>
       <orientation>DEFAULT</orientation>
@@ -136,6 +143,7 @@
       <shroudColor hex="595959"/>
     </diylc.electromechanical.PinHeader>
     <diylc.passive.Resistor>
+      <id>a15184cb-05d7-4228-91ee-40743bc36320</id>
       <name>R2</name>
       <alpha>127</alpha>
       <length value="0.5" unit="in"/>
@@ -161,6 +169,7 @@
       <shape>Standard</shape>
     </diylc.passive.Resistor>
     <diylc.shapes.Rectangle>
+      <id>4911c3c8-5738-4cd5-a1e8-0e904414a3dc</id>
       <name>RECT1</name>
       <alpha>127</alpha>
       <value></value>
@@ -179,6 +188,7 @@
       <edgeRadius value="0.0" unit="mm"/>
     </diylc.shapes.Rectangle>
     <diylc.boards.PerfBoard>
+      <id>8c5cae74-6a47-45fd-83bf-14edcecaf394</id>
       <name>Board1</name>
       <alpha>127</alpha>
       <value></value>
@@ -205,6 +215,7 @@
       <padColor hex="da8a67"/>
     </diylc.boards.PerfBoard>
     <diylc.connectivity.CopperTrace>
+      <id>0449a6ad-9ffa-4072-8af4-8b527f9d43a1</id>
       <name>Trace1</name>
       <alpha>127</alpha>
       <points>
@@ -223,8 +234,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>2317d674-2408-48af-8bea-2b4233bc60d5</id>
       <name>Trace9</name>
       <alpha>127</alpha>
       <points>
@@ -243,8 +256,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>38efb581-aa6b-472b-b76d-edc58d110920</id>
       <name>Trace10</name>
       <alpha>127</alpha>
       <points>
@@ -263,8 +278,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>ff81d79e-8009-4a25-92ad-214d4c73bdf8</id>
       <name>Trace11</name>
       <alpha>127</alpha>
       <points>
@@ -283,8 +300,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>7b15b19f-bcf2-48bb-99e5-5b4e7e81af56</id>
       <name>Trace12</name>
       <alpha>127</alpha>
       <points>
@@ -303,8 +322,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>23448f23-5f58-476c-9879-d8e68742c05c</id>
       <name>Trace13</name>
       <alpha>127</alpha>
       <points>
@@ -323,8 +344,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>cb76993d-5e78-4607-b18a-d0f3a7e0e4d2</id>
       <name>Trace15</name>
       <alpha>127</alpha>
       <points>
@@ -343,8 +366,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>1a47c9c4-b4de-4922-8fdd-8b4215eedc20</id>
       <name>Trace3</name>
       <alpha>127</alpha>
       <points>
@@ -363,8 +388,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>b54974eb-d37e-4b6f-85c3-41d5515546b4</id>
       <name>Trace7</name>
       <alpha>127</alpha>
       <points>
@@ -383,8 +410,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>28983bf9-8262-4769-ab25-172fd1b50d58</id>
       <name>Trace5</name>
       <alpha>127</alpha>
       <points>
@@ -403,8 +432,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>f2d255b8-8083-4f21-99bf-4e160ae5a7aa</id>
       <name>Trace2</name>
       <alpha>127</alpha>
       <points>
@@ -423,8 +454,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>a0026a2c-a963-4522-ace6-3163f043e6e1</id>
       <name>Trace6</name>
       <alpha>127</alpha>
       <points>
@@ -443,8 +476,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>2f97ce1f-1b3b-4464-9dac-146462dd6d8f</id>
       <name>Trace8</name>
       <alpha>127</alpha>
       <points>
@@ -463,8 +498,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>17185305-df97-4ad6-bfa8-0d4a1122e550</id>
       <name>Trace14</name>
       <alpha>127</alpha>
       <points>
@@ -483,8 +520,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.CopperTrace>
+      <id>ec04f9fc-dd34-4c45-bcf6-f1459e2e5773</id>
       <name>Trace16</name>
       <alpha>127</alpha>
       <points>
@@ -503,8 +542,10 @@
       <hideShortLeads>false</hideShortLeads>
       <thickness value="1.0" unit="mm"/>
       <layer>_1</layer>
+      <endingStyle>Round</endingStyle>
     </diylc.connectivity.CopperTrace>
     <diylc.connectivity.Turret>
+      <id>19a9e2f8-2e24-4763-9d94-b6736ed11eee</id>
       <name>Turret2</name>
       <alpha>127</alpha>
       <size value="0.16" unit="in"/>
@@ -514,6 +555,7 @@
       <value></value>
     </diylc.connectivity.Turret>
     <diylc.connectivity.Turret>
+      <id>4782393a-ed75-4519-83c0-b12f653ccba6</id>
       <name>Turret3</name>
       <alpha>127</alpha>
       <size value="0.16" unit="in"/>
@@ -523,6 +565,7 @@
       <value></value>
     </diylc.connectivity.Turret>
     <diylc.connectivity.Turret>
+      <id>1011b336-f74d-4a9f-a71f-d4e448c721eb</id>
       <name>Turret4</name>
       <alpha>127</alpha>
       <size value="0.16" unit="in"/>
@@ -532,6 +575,7 @@
       <value></value>
     </diylc.connectivity.Turret>
     <diylc.connectivity.Turret>
+      <id>46d584ef-2b74-4175-917e-1c89332a67bd</id>
       <name>Turret5</name>
       <alpha>127</alpha>
       <size value="0.16" unit="in"/>
@@ -541,6 +585,7 @@
       <value></value>
     </diylc.connectivity.Turret>
     <diylc.electromechanical.PinHeader>
+      <id>a4435ea7-b70f-41af-9f3b-76012e4e8ca7</id>
       <name>PH4</name>
       <alpha>127</alpha>
       <orientation>DEFAULT</orientation>
@@ -560,6 +605,7 @@
       <shroudColor hex="595959"/>
     </diylc.electromechanical.PinHeader>
     <diylc.shapes.Rectangle>
+      <id>5d0dd133-395a-4138-8bf6-9b8fc5fb6720</id>
       <name>RECT2</name>
       <alpha>127</alpha>
       <value></value>
@@ -578,6 +624,7 @@
       <edgeRadius value="0.0" unit="mm"/>
     </diylc.shapes.Rectangle>
     <diylc.misc.Buzzer>
+      <id>37dd6b25-1733-412d-913d-1a2a3d65668c</id>
       <name>BZ2</name>
       <alpha>127</alpha>
       <length value="8.0" unit="mm"/>
@@ -604,6 +651,7 @@
       <invert>false</invert>
     </diylc.misc.Buzzer>
     <diylc.misc.Label>
+      <id>bbef6a24-be4b-424c-a0be-7b8a5c11917b</id>
       <name>LAB1</name>
       <point x="3.1" y="6.0"/>
       <text>ESP32-C3</text>
@@ -614,6 +662,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>6a82dec2-c141-4ca8-b3fa-358b6780c9c9</id>
       <name>LAB2</name>
       <point x="6.4" y="3.9"/>
       <text>SD reader</text>
@@ -624,6 +673,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.connectivity.HookupWire>
+      <id>b1170065-ed8b-404f-8aaa-dab62baee6f5</id>
       <name>W3</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -642,6 +692,7 @@
       <stripeColor hex="ff0009"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>4667e749-503e-4d28-99a5-fffaef9424b0</id>
       <name>W5</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -660,6 +711,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>6eb26333-0e96-4041-9723-226438e3067b</id>
       <name>W6</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -678,6 +730,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>3e44b918-77f5-4118-a5cd-91c968ba992c</id>
       <name>W2</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -696,6 +749,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>87192c66-5d33-49da-be30-4ccbd8443f37</id>
       <name>W4</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -714,6 +768,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.passive.Resistor>
+      <id>8c5377b9-d594-43ab-a28c-e36b6a36ac52</id>
       <name>R3</name>
       <alpha>127</alpha>
       <length value="0.5" unit="in"/>
@@ -739,6 +794,7 @@
       <shape>Standard</shape>
     </diylc.passive.Resistor>
     <diylc.semiconductors.LED>
+      <id>99ef9dbf-c308-4d81-867a-2f30cfc5611f</id>
       <name>D1</name>
       <alpha>127</alpha>
       <length value="5.0" unit="mm"/>
@@ -760,6 +816,7 @@
       <value></value>
     </diylc.semiconductors.LED>
     <diylc.connectivity.HookupWire>
+      <id>3f70d10b-0955-433b-a432-44499331ef30</id>
       <name>W7</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -778,6 +835,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>321f7132-d0d5-47b6-b929-77cd01b2c1f7</id>
       <name>W8</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -796,12 +854,13 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>894982b2-b6e3-433e-8e52-ad18c9b7b05f</id>
       <name>W9</name>
       <alpha>127</alpha>
       <controlPoints2>
         <point x="3.9" y="6.3"/>
         <point x="4.4" y="6.3"/>
-        <point x="7.2" y="6.6"/>
+        <point x="7.1" y="6.5"/>
         <point x="6.8" y="5.6"/>
       </controlPoints2>
       <color hex="010101"/>
@@ -814,12 +873,13 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>f81bfaf7-1744-40ac-ae1b-3fda7811109b</id>
       <name>W10</name>
       <alpha>127</alpha>
       <controlPoints2>
         <point x="3.9" y="6.5"/>
         <point x="4.4" y="6.5"/>
-        <point x="6.3" y="6.9"/>
+        <point x="6.8" y="6.7"/>
         <point x="7.1" y="5.9"/>
       </controlPoints2>
       <color hex="ff0c00"/>
@@ -832,6 +892,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.electromechanical.PinHeader>
+      <id>2fc0d867-ce6c-4406-b464-ae7aac862333</id>
       <name>PH7</name>
       <alpha>127</alpha>
       <orientation>DEFAULT</orientation>
@@ -848,6 +909,7 @@
       <shroudColor hex="595959"/>
     </diylc.electromechanical.PinHeader>
     <diylc.electromechanical.PinHeader>
+      <id>b546690a-a99a-4f1a-843d-be875b1df0d1</id>
       <name>PH8</name>
       <alpha>127</alpha>
       <orientation>DEFAULT</orientation>
@@ -864,6 +926,7 @@
       <shroudColor hex="595959"/>
     </diylc.electromechanical.PinHeader>
     <diylc.electromechanical.PinHeader>
+      <id>e61a07e0-3674-419c-95e8-b22f93b93d96</id>
       <name>PH9</name>
       <alpha>127</alpha>
       <orientation>DEFAULT</orientation>
@@ -880,6 +943,7 @@
       <shroudColor hex="595959"/>
     </diylc.electromechanical.PinHeader>
     <diylc.semiconductors.TransistorTO220>
+      <id>067b334b-c03d-412c-815d-2fb6ce119043</id>
       <name>PNP</name>
       <alpha>100</alpha>
       <value></value>
@@ -899,6 +963,7 @@
       <leadLength value="3.5" unit="mm"/>
     </diylc.semiconductors.TransistorTO220>
     <diylc.connectivity.HookupWire>
+      <id>c58ede5b-5189-4cd9-ba0b-0082b0b8027a</id>
       <name>W21</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -917,6 +982,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>bab14712-5caf-44a1-9bf8-4f66cf8bcdad</id>
       <name>W22</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -935,6 +1001,7 @@
       <stripeColor hex="010101"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>0a949d78-9e4c-49bc-b3db-5da125ace450</id>
       <name>W23</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -953,6 +1020,7 @@
       <stripeColor hex="ff0000"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>5f9a1930-69cf-45c6-98a1-7a4bef138003</id>
       <name>W26</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -971,6 +1039,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>b778c4c1-0108-4583-9e68-9f696b519ae3</id>
       <name>W27</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -989,6 +1058,7 @@
       <stripeColor hex="002fff"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>85ad1a1b-60bb-4b58-945b-a46e825a179c</id>
       <name>W1</name>
       <alpha>63</alpha>
       <controlPoints2>
@@ -1007,6 +1077,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.misc.Label>
+      <id>fcd39718-d2fa-44e8-aca7-32aa59a88cbd</id>
       <name>LAB3</name>
       <point x="0.3" y="4.2"/>
       <text>+5V</text>
@@ -1017,6 +1088,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>f85ba04b-b3d4-47a6-84b8-68e545404774</id>
       <name>LAB4</name>
       <point x="0.3" y="4.4"/>
       <text>Data</text>
@@ -1027,6 +1099,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>db4aa202-f829-4589-a8bf-75fd34d18612</id>
       <name>LAB5</name>
       <point x="0.3" y="4.6"/>
       <text>GND</text>
@@ -1037,6 +1110,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>349b27ce-0386-43e8-9294-1787166ad60c</id>
       <name>LAB6</name>
       <point x="0.3" y="3.7"/>
       <text>Data</text>
@@ -1047,6 +1121,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>5485320b-2e77-44ed-b249-9de1e28e0022</id>
       <name>LAB7</name>
       <point x="0.3" y="3.9"/>
       <text>GND</text>
@@ -1057,6 +1132,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>59769e0d-e9cb-49a1-9a89-8361aae8b68b</id>
       <name>LAB8</name>
       <point x="0.3" y="3.5"/>
       <text>+5V</text>
@@ -1067,6 +1143,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>e3cef44b-fedf-4ff6-8a4a-2925ed99d23b</id>
       <name>LAB9</name>
       <point x="0.3" y="3.0"/>
       <text>Data</text>
@@ -1077,6 +1154,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>2d183df6-28ef-496c-975b-3b4c67304aef</id>
       <name>LAB10</name>
       <point x="0.3" y="3.2"/>
       <text>GND</text>
@@ -1087,6 +1165,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>ac664ddd-343e-4d0f-8dfa-9e3e8e621d65</id>
       <name>LAB11</name>
       <point x="0.3" y="2.8"/>
       <text>+5V</text>
@@ -1097,6 +1176,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.connectivity.PCBTerminalBlock>
+      <id>0cdeda68-d0d7-401d-a21c-d3aff7deb3ea</id>
       <name>TB1</name>
       <alpha>127</alpha>
       <controlPoints>
@@ -1113,6 +1193,7 @@
       <screwPosition>Offset</screwPosition>
     </diylc.connectivity.PCBTerminalBlock>
     <diylc.connectivity.PCBTerminalBlock>
+      <id>512f1f35-9910-4b3d-9ca4-ac3aad1fc030</id>
       <name>TB2</name>
       <alpha>127</alpha>
       <controlPoints>
@@ -1130,6 +1211,7 @@
       <screwPosition>Offset</screwPosition>
     </diylc.connectivity.PCBTerminalBlock>
     <diylc.connectivity.PCBTerminalBlock>
+      <id>d22be549-1876-4eff-9281-5303a6ed8ea2</id>
       <name>TB3</name>
       <alpha>127</alpha>
       <controlPoints>
@@ -1147,6 +1229,7 @@
       <screwPosition>Offset</screwPosition>
     </diylc.connectivity.PCBTerminalBlock>
     <diylc.misc.Label>
+      <id>d51e61ad-6ec1-4210-a055-74989f6c8e91</id>
       <name>LAB13</name>
       <point x="8.0" y="6.0"/>
       <text>USB-C socket</text>
@@ -1157,6 +1240,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.connectivity.HookupWire>
+      <id>98f0ceb7-fdd6-4a83-ad47-67eec7b6f45e</id>
       <name>W11</name>
       <alpha>63</alpha>
       <controlPoints2>
@@ -1175,6 +1259,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>08539c6b-7e8c-4100-86cd-055fc5bd89a3</id>
       <name>W12</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1193,6 +1278,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>aa05f55f-d87b-4819-81f2-8ee346ab52d7</id>
       <name>W13</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1211,6 +1297,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>84636a5e-e8d7-43c7-8a9f-b36ccb0e7339</id>
       <name>W14</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1229,6 +1316,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>2cc43a1e-3b6c-4ee6-ad12-4687fbd48abd</id>
       <name>W15</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1247,6 +1335,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>f60ec0b7-b621-4122-9f79-7586141c3799</id>
       <name>W16</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1265,6 +1354,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>4bb71698-d171-4165-9e2e-69ff683e9038</id>
       <name>W17</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1283,6 +1373,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>32d48bb4-8e82-490b-9637-756ffebda0be</id>
       <name>W18</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1301,6 +1392,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>89715cd9-575f-4256-b820-ed72704130e9</id>
       <name>W19</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1319,6 +1411,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>bbede394-4984-4009-b16d-9345cd9ad5fb</id>
       <name>W20</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1337,6 +1430,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>b6e785ae-58e9-4af7-9cb9-4e64b511bdeb</id>
       <name>W24</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1355,6 +1449,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>47c6f1cd-cf74-4c74-9629-62ee390060e7</id>
       <name>W25</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1373,6 +1468,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.shapes.Rectangle>
+      <id>8693fe02-18fc-4ba5-9038-8f52a64de6e5</id>
       <name>RECT3</name>
       <alpha>127</alpha>
       <value></value>
@@ -1391,6 +1487,7 @@
       <edgeRadius value="0.0" unit="mm"/>
     </diylc.shapes.Rectangle>
     <diylc.connectivity.HookupWire>
+      <id>2ac1f09f-6ac9-4011-9bb4-942bf252e8ec</id>
       <name>W28</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1409,6 +1506,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>bc400632-5cf8-4a4c-bdf9-33b086714638</id>
       <name>W29</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1427,6 +1525,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.shapes.Rectangle>
+      <id>b72a5331-d3d1-45d3-b570-65e429502296</id>
       <name>RECT4</name>
       <alpha>127</alpha>
       <value></value>
@@ -1445,6 +1544,7 @@
       <edgeRadius value="0.0" unit="mm"/>
     </diylc.shapes.Rectangle>
     <diylc.connectivity.Line>
+      <id>b9df3af9-c624-4874-9a59-eb124ed49179</id>
       <name>LN1</name>
       <alpha>127</alpha>
       <points>
@@ -1469,6 +1569,7 @@
       <arrowEnd>false</arrowEnd>
     </diylc.connectivity.Line>
     <diylc.shapes.Ellipse>
+      <id>001302f2-0857-475d-926b-37340148d0c1</id>
       <name>ELL1</name>
       <alpha>0</alpha>
       <value></value>
@@ -1486,6 +1587,7 @@
       <mode>TwoPoints</mode>
     </diylc.shapes.Ellipse>
     <diylc.shapes.Ellipse>
+      <id>b4ef68e4-de92-4a54-9a2d-4cda1e3d2083</id>
       <name>ELL2</name>
       <alpha>0</alpha>
       <value></value>
@@ -1503,6 +1605,7 @@
       <mode>TwoPoints</mode>
     </diylc.shapes.Ellipse>
     <diylc.connectivity.Line>
+      <id>c71ddab3-6356-40c4-9ad3-0de2c3dbe0dd</id>
       <name>LN2</name>
       <alpha>0</alpha>
       <points>
@@ -1548,6 +1651,7 @@
       <arrowEnd>false</arrowEnd>
     </diylc.connectivity.Line>
     <diylc.connectivity.Line>
+      <id>98b8c945-d9f6-45d2-86b0-7fedb277960c</id>
       <name>LN3</name>
       <alpha>127</alpha>
       <points>
@@ -1592,7 +1696,58 @@
       <arrowStart>true</arrowStart>
       <arrowEnd>false</arrowEnd>
     </diylc.connectivity.Line>
+    <diylc.passive.RadialCeramicDiskCapacitor>
+      <id>d4d7319a-a38b-41eb-b619-2b0b0320f7e4</id>
+      <name>1uF</name>
+      <alpha>127</alpha>
+      <length value="0.25" unit="in"/>
+      <width value="0.125" unit="in"/>
+      <points>
+        <point x="5.3" y="6.5"/>
+        <point x="5.3" y="6.3"/>
+        <point x="5.3" y="6.4"/>
+      </points>
+      <bodyColor hex="f0e68c"/>
+      <borderColor hex="a8a162"/>
+      <labelColor hex="000000"/>
+      <leadColor hex="cccccc"/>
+      <display>NAME</display>
+      <flipStanding>false</flipStanding>
+      <labelOriantation>Directional</labelOriantation>
+      <moveLabel>false</moveLabel>
+      <hideShortLeads>false</hideShortLeads>
+      <pinSpacing value="0.1" unit="in"/>
+      <value value="1.0" unit="uF"/>
+      <voltage>_63V</voltage>
+      <voltageNew value="50.0" unit="V"/>
+    </diylc.passive.RadialCeramicDiskCapacitor>
+    <diylc.passive.RadialCeramicDiskCapacitor>
+      <id>4f5eaf74-f2ca-4109-a7f5-52857b368edf</id>
+      <name>10 nF</name>
+      <alpha>127</alpha>
+      <length value="0.25" unit="in"/>
+      <width value="0.125" unit="in"/>
+      <points>
+        <point x="5.5" y="6.5"/>
+        <point x="5.5" y="6.3"/>
+        <point x="5.5" y="6.4"/>
+      </points>
+      <bodyColor hex="f0e68c"/>
+      <borderColor hex="a8a162"/>
+      <labelColor hex="000000"/>
+      <leadColor hex="cccccc"/>
+      <display>NAME</display>
+      <flipStanding>false</flipStanding>
+      <labelOriantation>Directional</labelOriantation>
+      <moveLabel>false</moveLabel>
+      <hideShortLeads>false</hideShortLeads>
+      <pinSpacing value="0.1" unit="in"/>
+      <value value="10.0" unit="nF"/>
+      <voltage>_63V</voltage>
+      <voltageNew value="50.0" unit="V"/>
+    </diylc.passive.RadialCeramicDiskCapacitor>
     <diylc.misc.Label>
+      <id>bf54df67-7921-4caa-8e8f-1db8f64f3e44</id>
       <name>LAB12</name>
       <point x="9.0" y="1.9"/>
       <text>USB-C socket</text>
@@ -1603,6 +1758,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>7f053316-21ba-4919-a5cf-8a046337bca6</id>
       <name>LAB14</name>
       <point x="11.0" y="1.9"/>
       <text>TCS sensor</text>
@@ -1613,6 +1769,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.connectivity.HookupWire>
+      <id>97805e7b-b434-4824-a17e-b48c35112ea6</id>
       <name>W30</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1631,6 +1788,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>bd99ebd7-463b-40d2-a89f-85a3f6cba68b</id>
       <name>W31</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1649,6 +1807,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>2454b86a-8668-48b6-8c22-556e5860912a</id>
       <name>W32</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1667,6 +1826,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>3b0e3ab1-6126-4724-b7c0-0138685f2394</id>
       <name>W33</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1685,6 +1845,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>b2a5cdee-3c54-4869-92e6-00e9edf88f52</id>
       <name>W34</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1703,6 +1864,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.connectivity.HookupWire>
+      <id>75cad142-4e44-4adb-be1b-bd19c18d029e</id>
       <name>W35</name>
       <alpha>127</alpha>
       <controlPoints2>
@@ -1721,6 +1883,7 @@
       <stripeColor hex="ffff00"/>
     </diylc.connectivity.HookupWire>
     <diylc.misc.Label>
+      <id>65f5d65c-9b5b-4df6-8e9b-6608fc3c3db8</id>
       <name>LAB15</name>
       <point x="5.8" y="3.4"/>
       <text>Ground</text>
@@ -1731,6 +1894,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>b2089761-a005-4157-8954-d536669a85cc</id>
       <name>LAB16</name>
       <point x="5.8" y="3.6"/>
       <text>VCC</text>
@@ -1741,6 +1905,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>6ec8ef5f-38f5-41e5-b519-537caf32b5e0</id>
       <name>LAB17</name>
       <point x="5.8" y="3.8"/>
       <text>MISO</text>
@@ -1751,6 +1916,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>4fcb5816-0efa-46dc-a02a-4048b0e92c7b</id>
       <name>LAB18</name>
       <point x="5.8" y="4.0"/>
       <text>MOSI</text>
@@ -1761,6 +1927,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>6b6e1f65-2be2-4610-b6c6-a277268af855</id>
       <name>LAB19</name>
       <point x="5.8" y="4.2"/>
       <text>SCK</text>
@@ -1771,6 +1938,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>10603837-2228-43fe-b0d0-c76830768c76</id>
       <name>LAB20</name>
       <point x="5.8" y="4.4"/>
       <text>CS</text>
@@ -1781,6 +1949,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>9aac5be8-f018-473d-bb73-5811c3dce0f0</id>
       <name>LAB21</name>
       <point x="7.8" y="4.9"/>
       <text>Flip line</text>
@@ -1791,6 +1960,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>4e5be1dc-0983-4bf0-b6f6-ec4c4827af2d</id>
       <name>LAB22</name>
       <point x="1.4" y="5.4"/>
       <text>Same corner</text>
@@ -1801,6 +1971,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>8d2bc6ba-07e5-4a4e-8f77-3f69f3da2564</id>
       <name>LAB23</name>
       <point x="2.5" y="3.1"/>
       <text>GPIO20</text>
@@ -1811,6 +1982,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>24cef315-1f78-4430-b329-931530dca8dc</id>
       <name>LAB24</name>
       <point x="3.7" y="3.1"/>
       <text>5V</text>
@@ -1821,6 +1993,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>35c3e60d-4473-4913-a66d-688cfa317de7</id>
       <name>LAB25</name>
       <point x="3.5" y="3.1"/>
       <text>GND</text>
@@ -1831,6 +2004,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>80f3fa1f-d685-4bda-88b2-f703fa2d9e7d</id>
       <name>LAB26</name>
       <point x="3.1" y="3.1"/>
       <text>MOSI</text>
@@ -1841,6 +2015,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>a0457924-540f-4509-91c7-efac26c80ba3</id>
       <name>LAB27</name>
       <point x="2.9" y="3.1"/>
       <text>MISO</text>
@@ -1851,6 +2026,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>db39663b-625e-4ba3-a125-0d02ccd1c58a</id>
       <name>LAB28</name>
       <point x="2.7" y="3.1"/>
       <text>SCK</text>
@@ -1861,6 +2037,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>bca61201-380d-4dd9-912b-43f113778c02</id>
       <name>LAB29</name>
       <point x="2.7" y="4.6"/>
       <text>SCL</text>
@@ -1871,6 +2048,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>107b227f-3ae4-4ad8-9a2e-4510b3c7140f</id>
       <name>LAB30</name>
       <point x="2.9" y="4.6"/>
       <text>SDA</text>
@@ -1881,6 +2059,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>a7991968-6262-4c90-a57f-bdf01a01d416</id>
       <name>LAB31</name>
       <point x="3.3" y="4.6"/>
       <text>GPIO4</text>
@@ -1891,6 +2070,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>e823c84c-e099-4a51-9ed1-56df7eebbc90</id>
       <name>LAB32</name>
       <point x="3.5" y="4.6"/>
       <text>GPIO3</text>
@@ -1901,6 +2081,7 @@
       <orientation>_270</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
+      <id>586ae2cd-efbc-470c-8a1b-f9ec2fff81c1</id>
       <name>LAB33</name>
       <point x="3.7" y="4.6"/>
       <text>GPIO2</text>
@@ -1912,6 +2093,7 @@
     </diylc.misc.Label>
   </components>
   <groups/>
+  <groupsEx/>
   <lockedLayers/>
   <lockedComponents/>
   <hiddenLayers/>
